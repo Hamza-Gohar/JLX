@@ -1,8 +1,9 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-// This will now work because of the `vite.config.ts` file which replaces
-// `process.env.API_KEY` with your secret key during the build process.
+// Fix: Use process.env.API_KEY directly in the GoogleGenAI constructor as per the coding guidelines.
+// This resolves the TypeScript error 'Property 'env' does not exist on type 'ImportMeta''.
+// The guidelines state to assume process.env.API_KEY is always available, so the existence check is removed.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const model = 'gemini-2.5-flash';
 
