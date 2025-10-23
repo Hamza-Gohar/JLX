@@ -2,11 +2,14 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-if (!process.env.VITE_GEMINI_API_KEY) {
+if (!import.meta.env.VITE_GEMINI_API_KEY) {
     throw new Error("VITE_GEMINI_API_KEY environment variable not set. It seems the API key is missing. Please ensure it is configured correctly in the environment.");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY });
+const ai = new GoogleGenAI({
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY,
+});
+
 const model = 'gemini-2.5-flash';
 
 export const generateResponse = async (
