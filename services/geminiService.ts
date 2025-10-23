@@ -1,32 +1,34 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
-import type { Message, Subject, Quiz, Part, TextPart } from '../types';
+import type { Message, Subject, Quiz, Part, TextPart } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
+// Use Vite's environment variables correctly
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
 
 export const generateResponse = async (
-    subject: Subject,
-    messages: Message[],
-    newParts: Part[]
+  subject: Subject,
+  messages: Message[],
+  newParts: Part[]
 ): Promise<string> => {
   try {
     const history: Content[] = messages
-        .filter(m => !m.isInterrupted) // Don't send interrupted turns
-        .map(m => ({
-            role: m.role,
-            parts: m.parts
-        }));
-    
-    const contents: Content[] = [...history, { role: 'user', parts: newParts }];
+      .filter((m) => !m.isInterrupted)
+      .map((m) => ({
+        role: m.role,
+        parts: m.parts,
+      }));
 
-    const response = await ai.models.generateContent({
-        model: model,
-        contents: contents,
-        config: {
-            systemInstruction: subject.systemPrompt,
-            temperature: 0.5,
-        }
+    const contents: Content[] = [...history, { role: "user", parts: newParts }];
+
+    const result = await ai.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction: subject.systemPrompt,
+        temperature: 0.5,
+      },
     });
+
 
     return response.text;
   } catch (error) {
