@@ -1,7 +1,7 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: "AIzaSyBNjZoaDNiTToPw5am8_UMgsba8sNyexsw" });
 const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 
 export const generateResponse = async (
