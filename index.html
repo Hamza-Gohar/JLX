@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-M" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JLX — Jauhar Lyceum High School Learning Assistant</title>
-    <meta name="description" content="An AI-powered learning assistant built for students of Jauhar Lyceum High School." />
+    <title>JLX - JLHS Learning Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
@@ -16,7 +16,8 @@
           displayMath: [['$$', '$$'], ['\\[', '\\]']]
         },
         svg: {
-          fontCache: 'global'
+          fontCache: 'global',
+          minScale: 0.5 // Scale down oversized equations to fit container
         }
       };
     </script>
@@ -30,22 +31,36 @@
       .font-urdu {
         font-family: 'Noto Nastaliq Urdu', sans-serif;
       }
-      .MJX-container {
-        overflow-x: auto;
-        overflow-y: hidden;
-        padding: 0.5rem 0;
+      /* Fix for text overflow in generated content */
+      .prose {
+        /* Ensures that long words will wrap and not overflow the container */
+        overflow-wrap: break-word;
+        word-wrap: break-word; /* legacy browser support */
+      }
+      .prose pre {
+        white-space: pre-wrap !important; /* Forces code to wrap */
+        word-break: break-all !important; /* Breaks long strings anywhere to prevent overflow */
+      }
+      .prose code {
+        word-break: break-all; /* Also apply to inline code */
+      }
+      /* Ensure MathJax equations don't overflow their containers */
+      .prose mjx-container {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto; /* Enable horizontal scrolling for oversized equations */
+        padding: 0.25rem 0;
+        text-align: left !important;
       }
     </style>
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.4",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.26.0",
-    "vite": "https://aistudiocdn.com/vite@^7.1.12",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0"
   }
 }
 </script>
@@ -53,7 +68,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

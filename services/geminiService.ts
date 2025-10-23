@@ -1,7 +1,7 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: "AIzaSyBNjZoaDNiTToPw5am8_UMgsba8sNyexsw" });
 const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 
 export const generateResponseStream = async (
@@ -43,8 +43,6 @@ export const generateResponseStream = async (
 
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
   try {
-    const quizAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     // Filter out interrupted messages and take the last 10 messages for context
     const conversationHistory = messages
       .filter(m => !m.isInterrupted)
@@ -63,7 +61,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     Conversation:
     ${conversationHistory}`;
 
-    const response = await quizAi.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
