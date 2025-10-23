@@ -10,7 +10,7 @@ const ai = new GoogleGenAI({
   apiKey: import.meta.env.VITE_GEMINI_API_KEY,
 });
 
-const model = 'gemini-2.5-flash';
+const model = 'gemini-2.0-flash';
 
 export const generateResponse = async (
     subject: Subject,
@@ -65,7 +65,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     ${conversationHistory}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash',
       contents: prompt,
       config: {
         systemInstruction: "You are a helpful assistant that creates educational quizzes in JSON format.",
