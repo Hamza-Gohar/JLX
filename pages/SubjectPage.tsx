@@ -461,7 +461,7 @@ const SubjectPage: React.FC = () => {
 
     return (
         <div 
-            className={`flex flex-col h-full transition-all duration-500 ease-in-out ${hasChatStarted ? 'justify-between' : 'justify-center items-center'} ${isUrdu ? 'font-urdu' : ''}`}
+            className={`flex flex-col h-[calc(100vh-105px)] transition-all duration-500 ease-in-out ${hasChatStarted ? 'justify-between' : 'justify-center items-center'} ${isUrdu ? 'font-urdu' : ''}`}
             dir={isUrdu ? 'rtl' : 'ltr'}
         >
             {showQuiz && quizData && (
@@ -484,9 +484,9 @@ const SubjectPage: React.FC = () => {
                     <div className={`flex items-center gap-4 transition-all duration-500 ease-in-out ${hasChatStarted ? 'flex-row' : 'flex-col'}`}>
                         <Icon className={`text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'w-10 h-10' : 'w-24 h-24'}`} />
                         <div>
-                            <h2 className={`font-bold text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'text-2xl' : 'text-5xl text-center'}`}>{name}</h2>
+                            <h2 className={`font-bold text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'text-xl sm:text-2xl' : 'text-4xl md:text-5xl text-center'}`}>{name}</h2>
                             {!hasChatStarted && 
-                                <p className="text-slate-400 transition-all duration-500 ease-in-out text-center text-lg mt-2">
+                                <p className="text-slate-400 transition-all duration-500 ease-in-out text-center text-base md:text-lg mt-2">
                                     {description}
                                 </p>
                             }
@@ -530,7 +530,7 @@ const SubjectPage: React.FC = () => {
                                         </div>
                                         <button 
                                             onClick={() => handleTryAgain(prevMessage.parts, index)}
-                                            className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-500 transition-colors flex-shrink-0"
+                                            className="text-xs sm:text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-500 transition-colors flex-shrink-0"
                                         >
                                             Try Again
                                         </button>
@@ -549,8 +549,8 @@ const SubjectPage: React.FC = () => {
             <div className="p-6 w-full max-w-4xl mx-auto">
                  {hasChatStarted &&
                     <div className="flex flex-wrap justify-end items-center gap-x-6 gap-y-3 mb-4">
-                        <button onClick={exportChat} className="text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                        <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
                             <span>Questions:</span>
                             {[3, 5, 10].map(num => (
                                 <button
@@ -565,7 +565,7 @@ const SubjectPage: React.FC = () => {
                          <button 
                             onClick={handleGenerateQuiz} 
                             disabled={isGeneratingQuiz || isLoading}
-                            className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             <QuizIcon className="w-5 h-5" />
                             <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
@@ -575,7 +575,7 @@ const SubjectPage: React.FC = () => {
                 {!hasChatStarted && (
                      <div className="grid grid-cols-2 gap-3 mb-4">
                         {quickQuestions.slice(0, 4).map((q, i) => (
-                            <button key={i} onClick={() => handleQuickQuestion(q)} className={`bg-white/5 p-3 rounded-xl text-sm text-slate-300 hover:bg-white/10 transition-colors ${isUrdu ? 'text-right leading-relaxed' : 'text-left'}`}>
+                            <button key={i} onClick={() => handleQuickQuestion(q)} className={`bg-white/5 p-3 rounded-xl text-xs sm:text-sm text-slate-300 hover:bg-white/10 transition-colors ${isUrdu ? 'text-right leading-relaxed' : 'text-left'}`}>
                                 {q}
                             </button>
                         ))}

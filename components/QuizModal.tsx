@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Quiz, QuizQuestion } from '../types';
 import { CheckIcon, XIcon } from './icons';
@@ -44,21 +45,21 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
 
   const renderResults = () => (
     <div className="text-center">
-      <h2 className="text-3xl font-bold text-white mb-4">Quiz Complete!</h2>
-      <p className="text-lg text-slate-300 mb-6">You scored</p>
-      <div className="text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 mb-8">
+      <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Quiz Complete!</h2>
+      <p className="text-base sm:text-lg text-slate-300 mb-6">You scored</p>
+      <div className="text-5xl sm:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 mb-8">
         {score} / {quiz.length}
       </div>
       <div className="flex justify-center gap-4">
           <button
               onClick={handleRestart}
-              className="px-6 py-3 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors"
+              className="px-6 py-3 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors text-sm sm:text-base"
           >
               Try Again
           </button>
           <button
               onClick={onClose}
-              className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-500 transition-colors"
+              className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-500 transition-colors text-sm sm:text-base"
           >
               Back to Chat
           </button>
@@ -83,8 +84,8 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
     return (
       <div>
         <div className="mb-8">
-          <p className="text-sm font-semibold text-blue-400 mb-2">Question {currentQuestionIndex + 1} of {quiz.length}</p>
-          <h3 className="text-2xl font-bold text-white">{question.question}</h3>
+          <p className="text-xs sm:text-sm font-semibold text-blue-400 mb-2">Question {currentQuestionIndex + 1} of {quiz.length}</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-white">{question.question}</h3>
         </div>
         <div className="space-y-4">
           {question.options.map((option, i) => (
@@ -92,7 +93,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
               key={i}
               onClick={() => handleSelectAnswer(option)}
               disabled={!!selectedAnswer}
-              className={`w-full text-left p-4 rounded-lg text-white transition-all duration-300 flex justify-between items-center ${getOptionClass(option)}`}
+              className={`w-full text-left p-4 rounded-lg text-white transition-all duration-300 flex justify-between items-center text-sm sm:text-base ${getOptionClass(option)}`}
             >
               <span className="flex-1 pr-4">{option}</span>
               {selectedAnswer && option === question.correctAnswer && <CheckIcon className="w-6 h-6 text-white flex-shrink-0"/>}
@@ -104,7 +105,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
           <div className="mt-8 text-center">
             <button
               onClick={handleNext}
-              className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-500 transition-colors"
+              className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-500 transition-colors text-sm sm:text-base"
             >
               {currentQuestionIndex < quiz.length - 1 ? 'Next Question' : 'Show Results'}
             </button>
@@ -126,7 +127,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
             </svg>
         </button>
         <div className="mb-6">
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-lg sm:text-xl font-bold text-white">
                 {subjectName} Quiz
             </h1>
             {!showResults && (

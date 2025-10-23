@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Subject } from '../types';
@@ -35,8 +36,8 @@ const SubjectCard: React.FC<SubjectCardProps> = ({ subject }) => {
         <div className={`flex items-center justify-center w-14 h-14 bg-gradient-to-br ${gradient} rounded-xl mb-5 shadow-lg`}>
           <Icon className="w-7 h-7 text-white" />
         </div>
-        <h3 className="text-xl font-bold mb-2 text-white">{name}</h3>
-        <p className="text-slate-400">{description}</p>
+        <h3 className="text-lg sm:text-xl font-bold mb-2 text-white">{name}</h3>
+        <p className="text-sm text-slate-400">{description}</p>
       </div>
     </Link>
   );
