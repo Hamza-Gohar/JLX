@@ -1,8 +1,13 @@
+
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash';
+if (!process.env.VITE_GEMINI_API_KEY) {
+    throw new Error("VITE_GEMINI_API_KEY environment variable not set. It seems the API key is missing. Please ensure it is configured correctly in the environment.");
+}
+
+const ai = new GoogleGenAI({ apiKey: process.env.VITE_GEMINI_API_KEY });
+const model = 'gemini-2.5-flash';
 
 export const generateResponse = async (
     subject: Subject,
@@ -57,7 +62,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     ${conversationHistory}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         systemInstruction: "You are a helpful assistant that creates educational quizzes in JSON format.",
