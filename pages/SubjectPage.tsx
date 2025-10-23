@@ -473,7 +473,7 @@ const SubjectPage: React.FC = () => {
             )}
             
             {/* Animated Header */}
-            <div className={`w-full p-6 transition-all duration-500 ease-in-out ${hasChatStarted ? 'border-b border-white/10' : ''}`}>
+            <div className={`w-full transition-all duration-500 ease-in-out ${hasChatStarted ? 'py-3 px-6 border-b border-white/10' : 'p-6'}`}>
                  <div className="flex items-center justify-between w-full" dir="ltr">
                     {/* Left: Back Button */}
                     <Link to="/" className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="Back to Home">

@@ -8,7 +8,7 @@ import { HomeIcon } from './constants';
 const App: React.FC = () => {
   return (
     <HashRouter>
-      <div className="bg-[#0B1220] text-slate-100 h-screen flex flex-col">
+      <div className="bg-[#0B1220] text-slate-100 h-full flex flex-col">
         <header className="p-6 md:p-8 border-b border-white/10 flex justify-between items-start flex-shrink-0">
           <div>
             <h1 className="text-white font-bold text-base sm:text-lg">Jauhar Lyceum High School</h1>

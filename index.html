@@ -24,8 +24,17 @@
       src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
     </script>
     <style>
+      html, body, #root {
+        height: 100%;
+      }
       body {
         font-family: 'Inter', sans-serif;
+        background-color: #0B1220; /* Set base background */
+      }
+      @media (max-width: 767px) {
+        body {
+          overflow: hidden; /* Prevent scrolling and overscroll on mobile */
+        }
       }
       .font-urdu {
         font-family: 'Noto Nastaliq Urdu', sans-serif;
