@@ -1,17 +1,14 @@
-
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: "AIzaSyBNjZoaDNiTToPw5am8_UMgsba8sNyexsw" });
 const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 
-export const generateResponseStream = async (
+export const generateResponse = async (
     subject: Subject,
     messages: Message[],
-    newParts: Part[],
-    onStream: (chunk: string) => void,
-    onError: (error: string) => void
-): Promise<void> => {
+    newParts: Part[]
+): Promise<string> => {
   try {
     const history: Content[] = messages
         .filter(m => !m.isInterrupted) // Don't send interrupted turns
@@ -22,7 +19,7 @@ export const generateResponseStream = async (
     
     const contents: Content[] = [...history, { role: 'user', parts: newParts }];
 
-    const response = await ai.models.generateContentStream({
+    const response = await ai.models.generateContent({
         model: model,
         contents: contents,
         config: {
@@ -31,13 +28,10 @@ export const generateResponseStream = async (
         }
     });
 
-    for await (const chunk of response) {
-      onStream(chunk.text);
-    }
-
+    return response.text;
   } catch (error) {
     console.error("Gemini API error:", error);
-    onError("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
+    throw new Error("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
   }
 };
 

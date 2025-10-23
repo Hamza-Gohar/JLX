@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SUBJECTS } from '../constants';
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
-import { generateResponseStream, generateQuiz } from '../services/geminiService';
+import { generateResponse, generateQuiz } from '../services/geminiService';
 import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon } from '../components/icons';
 import QuizModal from '../components/QuizModal';
 
@@ -80,7 +79,7 @@ const simpleMarkdownToHtml = (text: string): string => {
     // Headers
     else if (processedBlock.startsWith('#')) {
       processedBlock = processedBlock.replace(/^### (.*$)/gm, '<h3>$1</h3>')
-                                     .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                                     .replace(/^## (.*$)/gm, '<h2>$2</h2>')
                                      .replace(/^# (.*$)/gm, '<h1>$1</h1>');
     }
     // Paragraphs
@@ -115,16 +114,21 @@ const MessageText: React.FC<{ text: string; isStreaming: boolean }> = ({ text, i
         return simpleMarkdownToHtml(text);
     }, [text]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
             const typeset = () => {
-                MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
-                    // It's expected that MathJax might fail on incomplete formulas during streaming.
-                    // We can ignore these errors to avoid console spam.
-                    if (!isStreaming) {
-                        console.error('MathJax typesetting error:', err);
-                    }
-                });
+                if (contentRef.current) {
+                    // Clear previous typesetting before re-rendering to ensure a fresh pass
+                    MathJax.typesetClear([contentRef.current]);
+                    
+                    MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
+                        // It's expected that MathJax might fail on incomplete formulas during streaming.
+                        // We can ignore these errors to avoid console spam.
+                        if (!isStreaming) {
+                            console.error('MathJax typesetting error:', err);
+                        }
+                    });
+                }
             };
             
             // Throttle MathJax rendering during streaming for performance.
@@ -132,13 +136,14 @@ const MessageText: React.FC<{ text: string; isStreaming: boolean }> = ({ text, i
                 if (mathjaxTimeoutRef.current) {
                     clearTimeout(mathjaxTimeoutRef.current);
                 }
-                mathjaxTimeoutRef.current = window.setTimeout(typeset, 200); // 200ms delay
+                mathjaxTimeoutRef.current = window.setTimeout(typeset, 200);
             } else {
                 // When streaming is complete, ensure the final typesetting is done.
                 if (mathjaxTimeoutRef.current) {
                     clearTimeout(mathjaxTimeoutRef.current);
                 }
-                typeset();
+                // A minimal timeout ensures the DOM is fully painted before MathJax runs.
+                setTimeout(typeset, 0);
             }
         }
         
@@ -240,18 +245,18 @@ const useChat = (subject: Subject | undefined) => {
         setMessages(prev => [...prev, userMessage, assistantMessagePlaceholder]);
         setIsLoading(true);
 
-        const onStream = (textChunk: string) => {
+        try {
+            const fullText = await generateResponse(subject, messages, parts);
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model' && lastMessage.parts.length > 0 && 'text' in lastMessage.parts[0]) {
-                    lastMessage.parts[0].text += textChunk;
+                if (lastMessage.role === 'model') {
+                    lastMessage.parts = [{ text: fullText }];
                 }
                 return newMessages;
             });
-        };
-
-        const onError = (errorText: string) => {
+        } catch (error) {
+            const errorText = error instanceof Error ? error.message : "An unknown error occurred.";
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
@@ -261,10 +266,9 @@ const useChat = (subject: Subject | undefined) => {
                 }
                 return newMessages;
             });
-        };
-        
-        await generateResponseStream(subject, messages, parts, onStream, onError);
-        setIsLoading(false);
+        } finally {
+            setIsLoading(false);
+        }
 
     }, [subject, messages]);
 
@@ -278,18 +282,18 @@ const useChat = (subject: Subject | undefined) => {
         setMessages([...historyForRetry, userMessage, assistantMessagePlaceholder]);
         setIsLoading(true);
 
-        const onStream = (textChunk: string) => {
+        try {
+            const fullText = await generateResponse(subject, historyForRetry, userParts);
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model' && lastMessage.parts.length > 0 && 'text' in lastMessage.parts[0]) {
-                    lastMessage.parts[0].text += textChunk;
+                if (lastMessage.role === 'model') {
+                    lastMessage.parts = [{ text: fullText }];
                 }
                 return newMessages;
             });
-        };
-
-        const onError = (errorText: string) => {
+        } catch (error) {
+            const errorText = error instanceof Error ? error.message : "An unknown error occurred.";
             setMessages(prev => {
                 const newMessages = [...prev];
                 const lastMessage = newMessages[newMessages.length - 1];
@@ -299,10 +303,9 @@ const useChat = (subject: Subject | undefined) => {
                 }
                 return newMessages;
             });
-        };
-
-        await generateResponseStream(subject, historyForRetry, userParts, onStream, onError);
-        setIsLoading(false);
+        } finally {
+            setIsLoading(false);
+        }
 
     }, [subject, messages]);
 
