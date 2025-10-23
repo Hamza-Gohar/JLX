@@ -1,9 +1,10 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-// Fix: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to align with coding guidelines and fix the TypeScript error.
-// The non-null assertion `!` is used as the guidelines state to assume the API key is always available.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// Fix: Use process.env.API_KEY directly in the GoogleGenAI constructor as per the coding guidelines.
+// This resolves the TypeScript error 'Property 'env' does not exist on type 'ImportMeta''.
+// The guidelines state to assume process.env.API_KEY is always available, so the existence check is removed.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const model = 'gemini-2.5-flash';
 
 export const generateResponseStream = async (
