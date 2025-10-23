@@ -3,7 +3,7 @@ import type { Message, Subject, Quiz, Part, TextPart } from "../types";
 
 // Use Vite's environment variables correctly
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
+const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 export const generateResponse = async (
   subject: Subject,
@@ -59,7 +59,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     ${conversationHistory}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: "You are a helpful assistant that creates educational quizzes in JSON format.",
