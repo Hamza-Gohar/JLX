@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
@@ -94,7 +95,19 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
       }
     });
 
-    const quizJson = JSON.parse(response.text);
+    // --- START OF DEBUGGING CODE ---
+    console.log("Raw response text from Gemini for quiz:", response.text);
+    
+    let quizJson;
+    try {
+        quizJson = JSON.parse(response.text);
+    } catch(parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        console.error("The response from the API was not valid JSON.");
+        return null;
+    }
+    // --- END OF DEBUGGING CODE ---
+
     // Basic validation to ensure we have an array
     if (Array.isArray(quizJson)) {
       return quizJson as Quiz;
