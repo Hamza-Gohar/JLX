@@ -85,7 +85,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
       <div>
         <div className="mb-8">
           <p className="text-xs sm:text-sm font-semibold text-blue-400 mb-2">Question {currentQuestionIndex + 1} of {quiz.length}</p>
-          <h3 className="text-xl sm:text-2xl font-bold text-white">{question.question}</h3>
+          <h3 className="text-lg sm:text-2xl font-bold text-white">{question.question}</h3>
         </div>
         <div className="space-y-4">
           {question.options.map((option, i) => (

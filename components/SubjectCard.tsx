@@ -14,7 +14,7 @@ const SubjectCard: React.FC<SubjectCardProps> = ({ subject }) => {
   return (
     <Link 
       to={`/subject/${id}`} 
-      className="group relative block p-8 rounded-2xl bg-slate-800/50 border border-slate-700/80 
+      className="group relative block p-6 sm:p-8 rounded-2xl bg-slate-800/50 border border-slate-700/80 
                  hover:border-slate-600 
                  transition-all duration-300 ease-in-out 
                  transform hover:-translate-y-2 hover:scale-[1.03]

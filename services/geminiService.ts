@@ -44,8 +44,6 @@ export const generateResponseStream = async (
 
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
   try {
-    const quizAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     // Filter out interrupted messages and take the last 10 messages for context
     const conversationHistory = messages
       .filter(m => !m.isInterrupted)
@@ -64,7 +62,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     Conversation:
     ${conversationHistory}`;
 
-    const response = await quizAi.models.generateContent({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {

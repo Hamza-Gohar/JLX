@@ -461,7 +461,7 @@ const SubjectPage: React.FC = () => {
 
     return (
         <div 
-            className={`flex flex-col h-[calc(100vh-105px)] transition-all duration-500 ease-in-out ${hasChatStarted ? 'justify-between' : 'justify-center items-center'} ${isUrdu ? 'font-urdu' : ''}`}
+            className={`flex flex-col h-full transition-all duration-500 ease-in-out ${hasChatStarted ? 'justify-between' : 'justify-center items-center'} ${isUrdu ? 'font-urdu' : ''}`}
             dir={isUrdu ? 'rtl' : 'ltr'}
         >
             {showQuiz && quizData && (
@@ -482,9 +482,9 @@ const SubjectPage: React.FC = () => {
 
                     {/* Center: Icon and Title */}
                     <div className={`flex items-center gap-4 transition-all duration-500 ease-in-out ${hasChatStarted ? 'flex-row' : 'flex-col'}`}>
-                        <Icon className={`text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'w-10 h-10' : 'w-24 h-24'}`} />
+                        <Icon className={`text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'w-10 h-10' : 'w-16 h-16 sm:w-24 sm:h-24'}`} />
                         <div>
-                            <h2 className={`font-bold text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'text-xl sm:text-2xl' : 'text-4xl md:text-5xl text-center'}`}>{name}</h2>
+                            <h2 className={`font-bold text-white transition-all duration-500 ease-in-out ${hasChatStarted ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl md:text-5xl text-center'}`}>{name}</h2>
                             {!hasChatStarted && 
                                 <p className="text-slate-400 transition-all duration-500 ease-in-out text-center text-base md:text-lg mt-2">
                                     {description}
@@ -575,7 +575,7 @@ const SubjectPage: React.FC = () => {
                 {!hasChatStarted && (
                      <div className="grid grid-cols-2 gap-3 mb-4">
                         {quickQuestions.slice(0, 4).map((q, i) => (
-                            <button key={i} onClick={() => handleQuickQuestion(q)} className={`bg-white/5 p-3 rounded-xl text-xs sm:text-sm text-slate-300 hover:bg-white/10 transition-colors ${isUrdu ? 'text-right leading-relaxed' : 'text-left'}`}>
+                            <button key={i} onClick={() => handleQuickQuestion(q)} className={`bg-white/5 p-2 sm:p-3 rounded-xl text-xs sm:text-sm text-slate-300 hover:bg-white/10 transition-colors ${isUrdu ? 'text-right leading-relaxed' : 'text-left'}`}>
                                 {q}
                             </button>
                         ))}
