@@ -1,9 +1,9 @@
-
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-// Fix: Initialize GoogleGenAI with process.env.API_KEY as per guidelines.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Fix: Switched from `import.meta.env.VITE_API_KEY` to `process.env.API_KEY` to align with coding guidelines and fix the TypeScript error.
+// The non-null assertion `!` is used as the guidelines state to assume the API key is always available.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 const model = 'gemini-2.5-flash';
 
 export const generateResponseStream = async (
