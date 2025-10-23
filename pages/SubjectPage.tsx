@@ -107,53 +107,24 @@ const simpleMarkdownToHtml = (text: string): string => {
 
 const MessageText: React.FC<{ text: string; isStreaming: boolean }> = ({ text, isStreaming }) => {
     const contentRef = useRef<HTMLDivElement>(null);
-    const mathjaxTimeoutRef = useRef<number | null>(null);
 
     const htmlContent = useMemo(() => {
-        // Always process with markdown parser to show live formatting.
         return simpleMarkdownToHtml(text);
     }, [text]);
 
     useLayoutEffect(() => {
-        if (contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            const typeset = () => {
-                if (contentRef.current) {
-                    // Clear previous typesetting before re-rendering to ensure a fresh pass
-                    MathJax.typesetClear([contentRef.current]);
-                    
-                    MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
-                        // It's expected that MathJax might fail on incomplete formulas during streaming.
-                        // We can ignore these errors to avoid console spam.
-                        if (!isStreaming) {
-                            console.error('MathJax typesetting error:', err);
-                        }
-                    });
-                }
-            };
-            
-            // Throttle MathJax rendering during streaming for performance.
-            if (isStreaming) {
-                if (mathjaxTimeoutRef.current) {
-                    clearTimeout(mathjaxTimeoutRef.current);
-                }
-                mathjaxTimeoutRef.current = window.setTimeout(typeset, 200);
-            } else {
-                // When streaming is complete, ensure the final typesetting is done.
-                if (mathjaxTimeoutRef.current) {
-                    clearTimeout(mathjaxTimeoutRef.current);
-                }
-                // A minimal timeout ensures the DOM is fully painted before MathJax runs.
-                setTimeout(typeset, 0);
-            }
+        // We only want to run MathJax when the component has its final, non-streaming content.
+        // The `isStreaming` flag correctly identifies the temporary "thinking" state.
+        if (!isStreaming && contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+            // By running typesetting synchronously within useLayoutEffect, we ensure it happens
+            // right after the DOM is updated, preventing race conditions.
+            MathJax.typesetClear([contentRef.current]);
+            MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
+                // Since we're not streaming, any error is a real error.
+                console.error('MathJax typesetting error:', err);
+            });
         }
-        
-        return () => {
-            // Cleanup timeout on unmount
-            if (mathjaxTimeoutRef.current) {
-                clearTimeout(mathjaxTimeoutRef.current);
-            }
-        };
-    }, [isStreaming, htmlContent]);
+    }, [isStreaming, htmlContent]); // Effect depends on the final content and streaming state.
 
     return (
         <div
@@ -163,6 +134,7 @@ const MessageText: React.FC<{ text: string; isStreaming: boolean }> = ({ text, i
         />
     );
 };
+
 
 const MessagePartRenderer: React.FC<{ parts: Part[]; isStreaming: boolean }> = ({ parts, isStreaming }) => {
     return (
