@@ -1,15 +1,11 @@
+
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-// Fix: Per coding guidelines, API key must be retrieved from process.env.API_KEY.
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-  // Fix: Updated error message to match the environment variable change.
-  throw new Error("API_KEY is not set in the environment variables.");
-}
-
-const ai = new GoogleGenAI({ apiKey });
-// Fix: Use process.env to resolve the TypeScript error with import.meta.env.
+// Fix: Use process.env as per Gemini API guidelines and to resolve TypeScript errors.
+// The API key is now taken from process.env.API_KEY and passed directly to the constructor.
+// The environment variable for the model is also switched to use process.env.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 
 export const generateResponseStream = async (
