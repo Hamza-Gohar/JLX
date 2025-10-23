@@ -9,6 +9,7 @@ export interface Subject {
   systemPrompt: string;
   quickQuestions: string[];
   quotes: string[];
+  demoResponse: string;
 }
 
 export interface TextPart {

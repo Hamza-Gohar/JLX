@@ -1,11 +1,17 @@
-import { GoogleGenAI, Content, Type } from "@google/genai";
-import type { Message, Subject, Quiz, Part, TextPart } from '../types';
+// Fix: Manually define `import.meta.env` to fix TypeScript errors without a vite-env.d.ts file.
+interface ImportMetaEnv {
+  readonly VITE_DEMO_MODE?: string;
+}
 
-// Fix: Use process.env.API_KEY directly in the GoogleGenAI constructor as per the coding guidelines.
-// This resolves the TypeScript error 'Property 'env' does not exist on type 'ImportMeta''.
-// The guidelines state to assume process.env.API_KEY is always available, so the existence check is removed.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const model = 'gemini-2.5-flash';
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+import type { Message, Subject, Quiz, Part } from '../types';
+
+const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const generateResponseStream = async (
     subject: Subject,
@@ -14,97 +20,83 @@ export const generateResponseStream = async (
     onStream: (chunk: string) => void,
     onError: (error: string) => void
 ): Promise<void> => {
-  try {
-    const history: Content[] = messages
-        .filter(m => !m.isInterrupted) // Don't send interrupted turns
-        .map(m => ({
-            role: m.role,
-            parts: m.parts
-        }));
-    
-    const contents: Content[] = [...history, { role: 'user', parts: newParts }];
-
-    const response = await ai.models.generateContentStream({
-        model: model,
-        contents: contents,
-        config: {
-            systemInstruction: subject.systemPrompt,
-            temperature: 0.5,
+    if (isDemoMode) {
+        try {
+            const demoResponse = subject.demoResponse || "This is a demo response. Everything seems to be working!";
+            for (const char of demoResponse.split('')) {
+                await sleep(20);
+                onStream(char);
+            }
+        } catch (e) {
+            onError("An error occurred in demo mode.");
         }
-    });
-
-    for await (const chunk of response) {
-      onStream(chunk.text);
+        return;
     }
 
-  } catch (error) {
-    console.error("Gemini API error:", error);
-    onError("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
-  }
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, messages, newParts })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error("API error:", errorData);
+            onError(`I'm sorry, I encountered an error: ${errorData.error || response.statusText}`);
+            return;
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+            onError("Failed to read the response stream.");
+            return;
+        }
+
+        const decoder = new TextDecoder();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            onStream(decoder.decode(value, { stream: true }));
+        }
+    } catch (error) {
+        console.error("Fetch API error:", error);
+        onError("I'm sorry, I encountered a network error. Please check your connection and try again.");
+    }
 };
 
-
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
-  try {
-    // Filter out interrupted messages and take the last 10 messages for context
-    const conversationHistory = messages
-      .filter(m => !m.isInterrupted)
-      .slice(-10) 
-      .map(m => {
-        const textContent = m.parts
-          .filter((p): p is TextPart => 'text' in p)
-          .map(p => p.text)
-          .join(' ');
-        return `${m.role === 'user' ? 'User' : 'AI'}: ${textContent}`
-      })
-      .join('\n\n');
-
-    const prompt = `Based on the following conversation about ${subject.name}, generate a short multiple-choice quiz with ${questionCount} questions to test understanding. The questions should be relevant to the key topics discussed. Ensure the 'correctAnswer' value is an exact match to one of the strings in the 'options' array.
-
-    Conversation:
-    ${conversationHistory}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: "You are a helpful assistant that creates educational quizzes in JSON format.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              question: {
-                type: Type.STRING,
-                description: "The quiz question."
-              },
-              options: {
-                type: Type.ARRAY,
-                description: "An array of 4 possible answers.",
-                items: { type: Type.STRING }
-              },
-              correctAnswer: {
-                type: Type.STRING,
-                description: "The correct answer, which must be one of the strings from the options array."
-              }
-            },
-            required: ["question", "options", "correctAnswer"]
-          }
-        }
-      }
-    });
-
-    const quizJson = JSON.parse(response.text);
-    // Basic validation to ensure we have an array
-    if (Array.isArray(quizJson)) {
-      return quizJson as Quiz;
+    if (isDemoMode) {
+        return [
+            { question: "What is 2 + 2?", options: ["3", "4", "5", "6"], correctAnswer: "4" },
+            { question: "What is the capital of France?", options: ["London", "Berlin", "Paris", "Madrid"], correctAnswer: "Paris" },
+            { question: "Which planet is known as the Red Planet?", options: ["Earth", "Mars", "Jupiter", "Venus"], correctAnswer: "Mars" },
+        ].slice(0, questionCount);
     }
-    console.error("Parsed quiz data is not an array:", quizJson);
-    return null;
+    
+    try {
+        const response = await fetch('/api/quiz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, messages, questionCount })
+        });
+        
+        if (!response.ok) {
+            console.error("Quiz API error:", await response.text());
+            return null;
+        }
+        
+        const quizJson = await response.json();
 
-  } catch (error) {
-    console.error("Gemini API error during quiz generation:", error);
-    return null;
-  }
+        if (Array.isArray(quizJson)) {
+            return quizJson as Quiz;
+        }
+        
+        console.error("Parsed quiz data is not an array:", quizJson);
+        return null;
+
+    } catch (error) {
+        console.error("Gemini API error during quiz generation:", error);
+        return null;
+    }
 };

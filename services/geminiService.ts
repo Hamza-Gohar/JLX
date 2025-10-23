@@ -1,11 +1,8 @@
 import { GoogleGenAI, Content, Type } from "@google/genai";
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 
-// Fix: Use process.env.API_KEY directly in the GoogleGenAI constructor as per the coding guidelines.
-// This resolves the TypeScript error 'Property 'env' does not exist on type 'ImportMeta''.
-// The guidelines state to assume process.env.API_KEY is always available, so the existence check is removed.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const model = 'gemini-2.5-flash';
+const model = process.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash';
 
 export const generateResponseStream = async (
     subject: Subject,
@@ -46,6 +43,8 @@ export const generateResponseStream = async (
 
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
   try {
+    const quizAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     // Filter out interrupted messages and take the last 10 messages for context
     const conversationHistory = messages
       .filter(m => !m.isInterrupted)
@@ -64,7 +63,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
     Conversation:
     ${conversationHistory}`;
 
-    const response = await ai.models.generateContent({
+    const response = await quizAi.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {

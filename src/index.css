@@ -1,12 +1,3 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Custom styles for MathJax overflow that Tailwind can't handle directly */
-.prose mjx-container {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto; /* Enable horizontal scrolling for oversized equations */
-  padding: 0.25rem 0;
-  text-align: left !important;
-}

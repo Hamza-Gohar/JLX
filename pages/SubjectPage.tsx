@@ -39,7 +39,7 @@ const simpleMarkdownToHtml = (text: string): string => {
   if (!text) return '';
 
   const mathBlocks: string[] = [];
-  // 1. Protect MathJax content
+  // 1. Protect MathJax content by replacing it with a placeholder
   let processedText = text.replace(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^\$\n]+?\$|\\\(.+?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `__MATHJAX_PLACEHOLDER_${mathBlocks.length - 1}__`;
@@ -47,118 +47,62 @@ const simpleMarkdownToHtml = (text: string): string => {
 
   const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const applyInlineStyles = (line: string) => {
-    return line
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+?)`/g, (_match, code) => `<code>${escapeHtml(code)}</code>`);
-  };
-
-  const lines = processedText.split('\n');
+  // 2. Process block-level elements like code blocks, lists, and headers
+  const blocks = processedText.split(/(\n\n+)/);
   let html = '';
-  let inList: 'ul' | 'ol' | null = null;
-  let inCodeBlock = false;
-  let paragraphBuffer: string[] = [];
 
-  const flushParagraph = () => {
-    if (paragraphBuffer.length > 0) {
-      html += `<p>${paragraphBuffer.join('<br />')}</p>`;
-      paragraphBuffer = [];
-    }
-  };
-
-  const closeList = () => {
-    if (inList) {
-      html += `</${inList}>`;
-      inList = null;
-    }
-  };
-
-  for (const line of lines) {
-    // Code blocks (```)
-    if (line.trim().startsWith('```')) {
-      flushParagraph();
-      closeList();
-      if (inCodeBlock) {
-        html += '</code></pre>';
-      } else {
-        const lang = line.trim().substring(3).trim();
-        html += `<pre><code class="language-${lang || ''}">`;
-      }
-      inCodeBlock = !inCodeBlock;
-      continue;
+  for (const block of blocks) {
+    if (block.match(/^\n\n+$/)) {
+      continue; // It's just a separator
     }
 
-    if (inCodeBlock) {
-      html += escapeHtml(line) + '\n';
-      continue;
+    let processedBlock = block;
+    // Code blocks
+    if (processedBlock.startsWith('```')) {
+      processedBlock = processedBlock.replace(/```(\w*)\n([\s\S]+?)```/, (_match, lang, code) => 
+        `<pre><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`
+      );
+    }
+    // Unordered lists
+    else if (processedBlock.match(/^\s*[*+-] /m)) {
+      const items = processedBlock.trim().split('\n').map(item => 
+        `<li>${item.replace(/^\s*[*+-]\s*/, '')}</li>`
+      ).join('');
+      processedBlock = `<ul>${items}</ul>`;
+    }
+    // Ordered lists
+    else if (processedBlock.match(/^\s*\d+\. /m)) {
+      const items = processedBlock.trim().split('\n').map(item => 
+        `<li>${item.replace(/^\s*\d+\.\s*/, '')}</li>`
+      ).join('');
+      processedBlock = `<ol>${items}</ol>`;
+    }
+    // Headers
+    else if (processedBlock.startsWith('#')) {
+      processedBlock = processedBlock.replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                                     .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                                     .replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    }
+    // Paragraphs
+    else if (processedBlock.trim()) {
+      processedBlock = `<p>${processedBlock.trim().replace(/\n/g, '<br />')}</p>`;
     }
 
-    // Headers (#, ##, ###)
-    const headerMatch = line.match(/^(#+) (.*)/);
-    if (headerMatch) {
-      flushParagraph();
-      closeList();
-      const level = headerMatch[1].length;
-      const content = applyInlineStyles(headerMatch[2].trim());
-      if (level >= 1 && level <= 6) {
-        html += `<h${level}>${content}</h${level}>`;
-      }
-      continue;
-    }
-
-    // Unordered List item (*, -, +)
-    const ulMatch = line.match(/^\s*[*+-] (.*)/);
-    if (ulMatch) {
-      flushParagraph();
-      if (inList !== 'ul') {
-        closeList();
-        inList = 'ul';
-        html += '<ul>';
-      }
-      html += `<li>${applyInlineStyles(ulMatch[1].trim())}</li>`;
-      continue;
-    }
-    
-    // Ordered List item (1., 2.)
-    const olMatch = line.match(/^\s*(\d+)\. (.*)/);
-    if (olMatch) {
-      flushParagraph();
-      if (inList !== 'ol') {
-        closeList();
-        inList = 'ol';
-        html += '<ol>';
-      }
-      html += `<li>${applyInlineStyles(olMatch[2].trim())}</li>`;
-      continue;
-    }
-
-    // Blank line - terminates paragraphs and lists
-    if (line.trim() === '') {
-      flushParagraph();
-      closeList();
-      continue;
-    }
-
-    // If we are in a list but the line is not a list item, it must end the list.
-    closeList();
-    paragraphBuffer.push(applyInlineStyles(line));
+    html += processedBlock;
   }
-
-  flushParagraph();
-  closeList();
+  processedText = html;
   
-  if (inCodeBlock) { // Close unclosed code block at the end
-      html += '</code></pre>';
-  }
+  // 3. Process inline elements
+  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  processedText = processedText.replace(/`([^`]+?)`/g, (_match, code) => `<code>${escapeHtml(code)}</code>`);
 
-  // Restore MathJax content
-  html = html.replace(/__MATHJAX_PLACEHOLDER_(\d+)__/g, (_match, index) => {
-    const mathBlock = mathBlocks[parseInt(index, 10)];
-    return mathBlock.replace(/(?<!\\)#/g, '\\#'); // Sanitize hash for TeX
+  // 4. Restore MathJax content
+  processedText = processedText.replace(/__MATHJAX_PLACEHOLDER_(\d+)__/g, (_match, index) => {
+    return mathBlocks[parseInt(index, 10)];
   });
 
-  return html;
+  return processedText;
 };
 
 
@@ -243,6 +187,49 @@ const MessagePartRenderer: React.FC<{ parts: Part[]; isStreaming: boolean }> = (
 const useChat = (subject: Subject | undefined) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const storageKey = `chat_history_${subject?.id}`;
+
+    // Refs to hold current values for use in cleanup effect
+    const isLoadingRef = useRef(isLoading);
+    useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+
+    const messagesRef = useRef(messages);
+    useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+    useEffect(() => {
+        if (!subject) return;
+        try {
+            const savedMessages = localStorage.getItem(storageKey);
+            if (savedMessages) {
+                setMessages(JSON.parse(savedMessages));
+            }
+        } catch (error) {
+            console.error("Failed to parse messages from localStorage", error);
+            setMessages([]);
+        }
+    }, [subject, storageKey]);
+
+    useEffect(() => {
+        if (!subject || messages.length === 0) return;
+        localStorage.setItem(storageKey, JSON.stringify(messages));
+    }, [messages, subject, storageKey]);
+    
+    // Effect to handle saving interrupted state on unmount
+    useEffect(() => {
+        return () => { // This cleanup runs when the component/hook unmounts
+            if (isLoadingRef.current) {
+                const finalMessages = [...messagesRef.current];
+                const lastMessage = finalMessages[finalMessages.length - 1];
+                if (lastMessage && lastMessage.role === 'model') {
+                    if (lastMessage.parts.length === 1 && 'text' in lastMessage.parts[0] && lastMessage.parts[0].text.length === 0) {
+                        lastMessage.parts = [{ text: 'User Stopped The Response' }];
+                    }
+                    lastMessage.isInterrupted = true;
+                    localStorage.setItem(storageKey, JSON.stringify(finalMessages));
+                }
+            }
+        };
+    }, [storageKey]);
 
     const sendMessage = useCallback(async (parts: Part[]) => {
         if (!subject || parts.length === 0) return;
@@ -276,9 +263,7 @@ const useChat = (subject: Subject | undefined) => {
             });
         };
         
-        // Pass the current messages state directly, minus the placeholder
-        const history = messages.filter(m => !m.isInterrupted);
-        await generateResponseStream(subject, history, parts, onStream, onError);
+        await generateResponseStream(subject, messages, parts, onStream, onError);
         setIsLoading(false);
 
     }, [subject, messages]);
@@ -529,7 +514,7 @@ const SubjectPage: React.FC = () => {
                                 message.role === 'user' 
                                     ? `bg-blue-600 text-white ${isUrdu ? 'rounded-bl-none' : 'rounded-br-none'}` 
                                     : `bg-[#172033] text-slate-200 ${isUrdu ? 'rounded-br-none' : 'rounded-bl-none'}`
-                            } ${isUrdu ? 'leading-relaxed' : ''}`}>
+                            } break-words ${isUrdu ? 'leading-relaxed' : ''}`}>
                                {
                                 isThinking ? (
                                     <div className="flex items-center gap-2">
