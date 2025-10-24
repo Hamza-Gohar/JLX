@@ -1,10 +1,8 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { Message, Subject, Part, Content } from "../types";
 
-import { GoogleGenAI, Content, Type } from "@google/genai";
-import type { Message, Subject, Quiz, Part, TextPart } from "../types";
-
-// Use Vite's environment variables correctly
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
+const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
 
 export const generateResponse = async (
   subject: Subject,
@@ -21,21 +19,21 @@ export const generateResponse = async (
 
     const contents: Content[] = [...history, { role: "user", parts: newParts }];
 
-    const result = await ai.models.generateContent({
-      model,
+    const result = await ai.getGenerativeModel({ model }).generateContent({
       contents,
-      config: {
-        systemInstruction: subject.systemPrompt,
+      generationConfig: {
         temperature: 0.5,
       },
     });
 
-    return response.text;
+    // ✅ Correctly return the AI response text
+    return result.response.text();
   } catch (error) {
     console.error("Gemini API error:", error);
-    throw new Error("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
+    return "Sorry, there was an issue generating the response.";
   }
 };
+
 
 
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
