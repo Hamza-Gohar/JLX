@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SUBJECTS } from '../constants';
 import type { Message, Subject, Quiz, Part, TextPart } from '../types';
 import { generateResponse, generateQuiz } from '../services/geminiService';
-import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon } from '../components/icons';
+import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon, TrashIcon } from '../components/icons';
 import QuizModal from '../components/QuizModal';
 
 declare const MathJax: any;
@@ -34,104 +34,93 @@ const PaperPlaneIcon: React.FC<{className?: string}> = ({className}) => (
     </svg>
 );
 
-const simpleMarkdownToHtml = (text: string): string => {
-  if (!text) return '';
-
-  const mathBlocks: string[] = [];
-  // 1. Protect MathJax content by replacing it with a placeholder
-  let processedText = text.replace(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^\$\n]+?\$|\\\(.+?\\\))/g, (match) => {
-    mathBlocks.push(match);
-    return `__MATHJAX_PLACEHOLDER_${mathBlocks.length - 1}__`;
-  });
-
-  const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  // 2. Process block-level elements like code blocks, lists, and headers
-  const blocks = processedText.split(/(\n\n+)/);
-  let html = '';
-
-  for (const block of blocks) {
-    if (block.match(/^\n\n+$/)) {
-      continue; // It's just a separator
-    }
-
-    let processedBlock = block;
-    // Code blocks
-    if (processedBlock.startsWith('```')) {
-      processedBlock = processedBlock.replace(/```(\w*)\n([\s\S]+?)```/, (_match, lang, code) => 
-        `<pre><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`
-      );
-    }
-    // Unordered lists
-    else if (processedBlock.match(/^\s*[*+-] /m)) {
-      const items = processedBlock.trim().split('\n').map(item => 
-        `<li>${item.replace(/^\s*[*+-]\s*/, '')}</li>`
-      ).join('');
-      processedBlock = `<ul>${items}</ul>`;
-    }
-    // Ordered lists
-    else if (processedBlock.match(/^\s*\d+\. /m)) {
-      const items = processedBlock.trim().split('\n').map(item => 
-        `<li>${item.replace(/^\s*\d+\.\s*/, '')}</li>`
-      ).join('');
-      processedBlock = `<ol>${items}</ol>`;
-    }
-    // Headers
-    else if (processedBlock.startsWith('#')) {
-      processedBlock = processedBlock.replace(/^### (.*$)/gm, '<h3>$1</h3>')
-                                     .replace(/^## (.*$)/gm, '<h2>$2</h2>')
-                                     .replace(/^# (.*$)/gm, '<h1>$1</h1>');
-    }
-    // Paragraphs
-    else if (processedBlock.trim()) {
-      processedBlock = `<p>${processedBlock.trim().replace(/\n/g, '<br />')}</p>`;
-    }
-
-    html += processedBlock;
-  }
-  processedText = html;
-  
-  // 3. Process inline elements
-  processedText = processedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  processedText = processedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  processedText = processedText.replace(/`([^`]+?)`/g, (_match, code) => `<code>${escapeHtml(code)}</code>`);
-
-  // 4. Restore MathJax content
-  processedText = processedText.replace(/__MATHJAX_PLACEHOLDER_(\d+)__/g, (_match, index) => {
-    return mathBlocks[parseInt(index, 10)];
-  });
-
-  return processedText;
-};
-
-
-const MessageText: React.FC<{ text: string; isStreaming: boolean }> = ({ text, isStreaming }) => {
+const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> = ({ text, isStreaming }) => {
     const contentRef = useRef<HTMLDivElement>(null);
 
-    const htmlContent = useMemo(() => {
-        return simpleMarkdownToHtml(text);
-    }, [text]);
-
     useLayoutEffect(() => {
-        // We only want to run MathJax when the component has its final, non-streaming content.
-        // The `isStreaming` flag correctly identifies the temporary "thinking" state.
         if (!isStreaming && contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            // By running typesetting synchronously within useLayoutEffect, we ensure it happens
-            // right after the DOM is updated, preventing race conditions.
             MathJax.typesetClear([contentRef.current]);
             MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
-                // Since we're not streaming, any error is a real error.
                 console.error('MathJax typesetting error:', err);
             });
         }
-    }, [isStreaming, htmlContent]); // Effect depends on the final content and streaming state.
+    }, [isStreaming, text]);
+
+    const parseInline = (line: string): React.ReactNode => {
+        const mathRegex = /(\$[^$]+\$|\$\$[\s\S]+?\$\$)/g;
+        const parts = line.split(mathRegex);
+
+        return parts.map((part, i) => {
+            if (i % 2 === 1) { // This is a MathJax part
+                return part;
+            }
+
+            const inlineRegex = /(\*\*.*?\*\*|\*.*?\*|`.*?`|~~.*?~~)/g;
+            const textParts = part.split(inlineRegex).filter(Boolean);
+
+            return textParts.map((textPart, j) => {
+                if (textPart.startsWith('**') && textPart.endsWith('**')) {
+                    return <strong key={j}>{textPart.slice(2, -2)}</strong>;
+                }
+                if (textPart.startsWith('*') && textPart.endsWith('*')) {
+                    return <em key={j}>{textPart.slice(1, -1)}</em>;
+                }
+                if (textPart.startsWith('`') && textPart.endsWith('`')) {
+                    return <code key={j} className="bg-slate-700 rounded px-1 py-0.5 font-mono text-sm">{textPart.slice(1, -1)}</code>;
+                }
+                if (textPart.startsWith('~~') && textPart.endsWith('~~')) {
+                    return <del key={j}>{textPart.slice(2, -2)}</del>;
+                }
+                return textPart;
+            });
+        });
+    };
+
+    const renderContent = () => {
+        const blocks = text.split(/\n{2,}/);
+        
+        return blocks.map((block, i) => {
+            const trimmedBlock = block.trim();
+            if (!trimmedBlock) return null;
+
+            const lines = trimmedBlock.split('\n');
+            const firstLine = lines[0];
+
+            if (firstLine.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
+            if (firstLine.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
+            if (firstLine.startsWith('### ')) return <h3 key={i} className="text-lg font-bold mt-4 mb-2">{parseInline(firstLine.substring(4))}</h3>;
+            
+            if (lines.every(line => line.trim().startsWith('* ') || line.trim().startsWith('- '))) {
+                return (
+                    <ul key={i} className="list-disc list-inside space-y-1 my-2">
+                        {lines.map((line, j) => (
+                            <li key={j}>{parseInline(line.replace(/^(\*|-)\s*/, ''))}</li>
+                        ))}
+                    </ul>
+                );
+            }
+            
+             if (lines.every(line => /^\d+\.\s/.test(line.trim()))) {
+                 return (
+                    <ol key={i} className="list-decimal list-inside space-y-1 my-2">
+                        {lines.map((line, j) => (
+                            <li key={j}>{parseInline(line.replace(/^\d+\.\s*/, ''))}</li>
+                        ))}
+                    </ol>
+                );
+            }
+
+            return <p key={i} className="my-2">{parseInline(block)}</p>;
+        });
+    };
 
     return (
         <div
             ref={contentRef}
-            className="prose prose-invert prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-        />
+            className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap"
+        >
+          {renderContent()}
+        </div>
     );
 };
 
@@ -141,7 +130,7 @@ const MessagePartRenderer: React.FC<{ parts: Part[]; isStreaming: boolean }> = (
         <div className="space-y-3">
             {parts.map((part, index) => {
                 if ('text' in part) {
-                    return <MessageText key={index} text={part.text} isStreaming={isStreaming} />;
+                    return <FormattedMessageContent key={index} text={part.text} isStreaming={isStreaming} />;
                 }
                 if ('inlineData' in part && part.inlineData.mimeType.startsWith('image/')) {
                     return (
@@ -179,6 +168,8 @@ const useChat = (subject: Subject | undefined) => {
             const savedMessages = localStorage.getItem(storageKey);
             if (savedMessages) {
                 setMessages(JSON.parse(savedMessages));
+            } else {
+                setMessages([]);
             }
         } catch (error) {
             console.error("Failed to parse messages from localStorage", error);
@@ -187,8 +178,12 @@ const useChat = (subject: Subject | undefined) => {
     }, [subject, storageKey]);
 
     useEffect(() => {
-        if (!subject || messages.length === 0) return;
-        localStorage.setItem(storageKey, JSON.stringify(messages));
+        if (!subject) return;
+        if (messages.length > 0) {
+            localStorage.setItem(storageKey, JSON.stringify(messages));
+        } else {
+            localStorage.removeItem(storageKey);
+        }
     }, [messages, subject, storageKey]);
     
     // Effect to handle saving interrupted state on unmount
@@ -206,6 +201,14 @@ const useChat = (subject: Subject | undefined) => {
                 }
             }
         };
+    }, [storageKey]);
+
+    const clearChat = useCallback(() => {
+        // Explicitly remove from localStorage to ensure data is cleared,
+        // then update state to re-render the UI. This is more robust
+        // than relying solely on the useEffect hook.
+        localStorage.removeItem(storageKey);
+        setMessages([]);
     }, [storageKey]);
 
     const sendMessage = useCallback(async (parts: Part[]) => {
@@ -281,7 +284,7 @@ const useChat = (subject: Subject | undefined) => {
 
     }, [subject, messages]);
 
-    return { messages, isLoading, sendMessage, handleTryAgain };
+    return { messages, isLoading, sendMessage, handleTryAgain, clearChat };
 };
 
 const FilePreview: React.FC<{ file: File; onRemove: () => void }> = ({ file, onRemove }) => {
@@ -325,7 +328,7 @@ const FilePreview: React.FC<{ file: File; onRemove: () => void }> = ({ file, onR
 const SubjectPage: React.FC = () => {
     const { subjectId } = useParams<{ subjectId: string }>();
     const subject = SUBJECTS.find(s => s.id === subjectId);
-    const { messages, isLoading, sendMessage, handleTryAgain } = useChat(subject);
+    const { messages, isLoading, sendMessage, handleTryAgain, clearChat } = useChat(subject);
     const [inputValue, setInputValue] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -420,6 +423,10 @@ const SubjectPage: React.FC = () => {
         URL.revokeObjectURL(url);
     };
     
+    const handleClearChat = () => {
+        clearChat();
+    };
+
     const handleGenerateQuiz = useCallback(async () => {
         if (!subject) return;
 
@@ -524,6 +531,10 @@ const SubjectPage: React.FC = () => {
             <div className="p-6 w-full max-w-4xl mx-auto">
                  {hasChatStarted &&
                     <div className="flex flex-wrap justify-end items-center gap-x-6 gap-y-3 mb-4">
+                        <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
+                            <TrashIcon className="w-4 h-4" />
+                            Clear Chat
+                        </button>
                         <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
                         <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
                             <span>Questions:</span>

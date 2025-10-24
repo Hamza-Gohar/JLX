@@ -30,7 +30,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Laws of motion, energy, and the physical universe',
     Icon: PhysicsIcon,
     gradient: 'from-purple-500 to-violet-400',
-    systemPrompt: 'You are JLX — Physics Expert for JLHS. Focus on explaining laws, formulas, and experiments. Use LaTeX for mathematical formulas and markdown for general formatting.',
+    systemPrompt: 'You are JLX — Physics Expert for JLHS. Explain everything in simple and easy wording with real life examples, experiments etc. Use LaTeX for mathematical formulas and markdown for general formatting.',
     quickQuestions: ["Explain Newton's first law of motion.", "What is the theory of relativity?", "Define kinetic energy.", "How does gravity work?"],
     quotes: ["The important thing is not to stop questioning.", "Look deep into nature, and then you will understand everything better."]
   },
@@ -40,7 +40,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Elements, reactions, and molecular science',
     Icon: ChemistryIcon,
     gradient: 'from-emerald-500 to-green-400',
-    systemPrompt: 'You are JLX — Chemistry Expert for JLHS. Provide balanced equations and safe lab tips. Use markdown for formatting.',
+    systemPrompt: 'You are JLX — Chemistry Expert for JLHS. Exlpain everything in easy and simple working. Provide balanced equations. Use markdown for formatting.',
     quickQuestions: ["What is a covalent bond?", "How do you balance a chemical equation?", "Describe the periodic table.", "What is pH?"],
     quotes: ["Chemistry is the study of matter, but I prefer to see it as the study of change.", "Every aspect of the world today... is affected by chemistry."]
   },
@@ -50,7 +50,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Life sciences, cells, and living organisms',
     Icon: BiologyIcon,
     gradient: 'from-rose-500 to-pink-400',
-    systemPrompt: 'You are JLX — Biology Expert for JLHS. Use simple explanations, diagrams (ASCII if needed), and mnemonics. Use markdown for formatting.',
+    systemPrompt: 'You are JLX — Biology Expert for JLHS. Use simple and easy explanations, and mnemonics. Use markdown for formatting.',
     quickQuestions: ["What is photosynthesis?", "Explain DNA replication.", "What are the parts of a cell?", "Describe the human circulatory system."],
     quotes: ["The good thing about science is that it's true whether or not you believe in it.", "In all things of nature there is something of the marvelous."]
   },
@@ -100,7 +100,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Algorithms, data structures, and programming',
     Icon: ComputerScienceIcon,
     gradient: 'from-fuchsia-500 to-pink-500',
-    systemPrompt: 'You are JLX — Computer Science Expert for JLHS. Explain concepts clearly, provide code examples in Python or JavaScript, and discuss algorithms and data structures. Use markdown for formatting.',
+    systemPrompt: 'You are JLX — Computer Science Expert for JLHS. Teach everything in easy to understand way. Explain concepts clearly, and discuss examples. Use markdown for formatting.',
     quickQuestions: ["What is an algorithm?", "Explain Big O notation.", "What's the difference between an array and a linked list?", "How does the internet work?"],
     quotes: ["Talk is cheap. Show me the code.", "The computer was born to solve problems that did not exist before."]
   },
