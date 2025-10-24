@@ -1,39 +1,47 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { Message, Subject, Part, Content } from "../types";
 
-const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
+import { GoogleGenAI, Content, Type } from "@google/genai";
+import type { Message, Subject, Quiz, Part, TextPart } from '../types';
+
+if (!import.meta.env.VITE_GEMINI_API_KEY) {
+    throw new Error("VITE_GEMINI_API_KEY environment variable not set. It seems the API key is missing. Please ensure it is configured correctly in the environment.");
+}
+
+const ai = new GoogleGenAI({
+  apiKey: import.meta.env.VITE_GEMINI_API_KEY,
+});
+
+const model = 'gemini-2.0-flash';
 
 export const generateResponse = async (
-  subject: Subject,
-  messages: Message[],
-  newParts: Part[]
+    subject: Subject,
+    messages: Message[],
+    newParts: Part[]
 ): Promise<string> => {
   try {
     const history: Content[] = messages
-      .filter((m) => !m.isInterrupted)
-      .map((m) => ({
-        role: m.role,
-        parts: m.parts,
-      }));
+        .filter(m => !m.isInterrupted) // Don't send interrupted turns
+        .map(m => ({
+            role: m.role,
+            parts: m.parts
+        }));
+    
+    const contents: Content[] = [...history, { role: 'user', parts: newParts }];
 
-    const contents: Content[] = [...history, { role: "user", parts: newParts }];
-
-    const result = await ai.getGenerativeModel({ model }).generateContent({
-      contents,
-      generationConfig: {
-        temperature: 0.5,
-      },
+    const response = await ai.models.generateContent({
+        model: model,
+        contents: contents,
+        config: {
+            systemInstruction: subject.systemPrompt,
+            temperature: 0.5,
+        }
     });
 
-    // ✅ Correctly return the AI response text
     return response.text;
   } catch (error) {
     console.error("Gemini API error:", error);
     throw new Error("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
   }
 };
-
 
 
 
