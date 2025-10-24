@@ -34,6 +34,51 @@ const PaperPlaneIcon: React.FC<{className?: string}> = ({className}) => (
     </svg>
 );
 
+const CopyIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path fillRule="evenodd" d="M10.5 3.75a2.25 2.25 0 00-2.25 2.25v12a2.25 2.25 0 002.25 2.25h3a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25h-3zm-2.25 2.25a.75.75 0 01.75-.75h3a.75.75 0 01.75.75v12a.75.75 0 01-.75.75h-3a.75.75 0 01-.75-.75V6zm6-1.5A2.25 2.25 0 0012 2.25H6a2.25 2.25 0 00-2.25 2.25v12A2.25 2.25 0 006 19.5h1.5a.75.75 0 000-1.5H6a.75.75 0 01-.75-.75V4.5a.75.75 0 01.75-.75h6a.75.75 0 01.75.75v1.5a.75.75 0 001.5 0v-1.5z" clipRule="evenodd" />
+    </svg>
+);
+
+const ClipboardCheckIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path fillRule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.454-12.68a.75.75 0 011.04-.208z" clipRule="evenodd" />
+    </svg>
+);
+
+const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handleCopy = useCallback(() => {
+        if (isCopied) return;
+        navigator.clipboard.writeText(code).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2500);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+        });
+    }, [code, isCopied]);
+
+    return (
+        <div className="bg-slate-800/70 rounded-lg my-4 overflow-hidden border border-slate-700">
+            <div className="flex justify-between items-center px-4 py-1.5 bg-slate-900/50">
+                <span className="text-xs font-sans text-slate-400 lowercase">{language || 'code'}</span>
+                <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                    disabled={isCopied}
+                >
+                    {isCopied ? <ClipboardCheckIcon className="w-4 h-4 text-green-400" /> : <CopyIcon className="w-4 h-4" />}
+                    {isCopied ? 'Copied!' : 'Copy code'}
+                </button>
+            </div>
+            <pre className="p-4 overflow-x-auto text-sm">
+                <code className={`font-mono language-${language}`}>{code}</code>
+            </pre>
+        </div>
+    );
+};
+
 const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> = ({ text, isStreaming }) => {
     const contentRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +120,97 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
             });
         });
     };
+    
+    const MarkdownList: React.FC<{ lines: string[], parseInlineFn: (line: string) => React.ReactNode }> = ({ lines, parseInlineFn }) => {
+        const getIndent = (line: string): number => line.match(/^\s*/)?.[0].length ?? 0;
+
+        const buildList = (startIndex: number, minIndent: number): [React.ReactElement | null, number] => {
+            const items: React.ReactNode[] = [];
+            let currentIndex = startIndex;
+
+            if (currentIndex >= lines.length) return [null, currentIndex];
+
+            const listType = lines[startIndex].trim().startsWith('*') || lines[startIndex].trim().startsWith('-') ? 'ul' : 'ol';
+
+            while (currentIndex < lines.length) {
+                const line = lines[currentIndex];
+                const indent = getIndent(line);
+                
+                if (line.trim() === '') {
+                    currentIndex++;
+                    continue;
+                }
+
+                if (indent < minIndent) break;
+
+                if (indent === minIndent) {
+                    const liContentNodes: React.ReactNode[] = [];
+                    let textBlockLines: string[] = [line.trim().replace(/^\s*(\*|-|\d+\.)\s+/, '')];
+                    let nestedList: React.ReactElement | null = null;
+                    let nextIndex = currentIndex + 1;
+
+                    const renderTextBlock = () => {
+                        if (textBlockLines.length > 0 && textBlockLines.join('').trim()) {
+                            liContentNodes.push(parseInlineFn(textBlockLines.join('\n')));
+                        }
+                        textBlockLines = [];
+                    };
+
+                    while (nextIndex < lines.length) {
+                        const nextLine = lines[nextIndex];
+                        const nextIndent = getIndent(nextLine);
+                        if (nextIndent <= minIndent && nextLine.trim() !== '') break;
+
+                        if (nextIndent > minIndent || nextLine.trim() === '') {
+                             if (nextLine.match(/^\s*(\*|-|\d+\.)\s/)) {
+                                renderTextBlock();
+                                [nestedList, nextIndex] = buildList(nextIndex, nextIndent);
+                                break;
+                            } else if (nextLine.trim().startsWith('```')) {
+                                renderTextBlock();
+                                const lang = nextLine.trim().substring(3);
+                                const codeLines: string[] = [];
+                                nextIndex++;
+                                while (nextIndex < lines.length && !lines[nextIndex].trim().startsWith('```')) {
+                                    codeLines.push(lines[nextIndex]);
+                                    nextIndex++;
+                                }
+                                const baseIndent = codeLines.length > 0 ? getIndent(codeLines[0]) : 0;
+                                const code = codeLines.map(l => l.substring(baseIndent)).join('\n');
+                                liContentNodes.push(<CodeBlock key={liContentNodes.length} language={lang} code={code} />);
+                                if (nextIndex < lines.length) nextIndex++; 
+                            } else {
+                                textBlockLines.push(nextLine.substring(minIndent + 2)); // Basic un-indent
+                                nextIndex++;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    renderTextBlock();
+
+                    items.push(<li key={currentIndex}>{liContentNodes}{nestedList}</li>);
+                    currentIndex = nextIndex;
+                } else {
+                   currentIndex++;
+                }
+            }
+
+            const ListComponent = listType === 'ul' ? 'ul' : 'ol';
+            const listClasses = ListComponent === 'ul' 
+                ? "list-disc list-outside space-y-2 my-2 pl-5"
+                : "list-decimal list-outside space-y-2 my-2 pl-5";
+    
+            return [<ListComponent key={startIndex} className={listClasses}>{items}</ListComponent>, currentIndex];
+        };
+
+        const firstRealLineIndex = lines.findIndex(l => l.trim() !== '');
+        if (firstRealLineIndex === -1) return null;
+
+        const [listElement] = buildList(firstRealLineIndex, getIndent(lines[firstRealLineIndex]));
+        return listElement;
+    };
+
 
     const renderContent = () => {
         const blocks = text.split(/\n{2,}/);
@@ -86,28 +222,65 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
             const lines = trimmedBlock.split('\n');
             const firstLine = lines[0];
 
-            if (firstLine.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
-            if (firstLine.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
+            if (firstLine.startsWith('###### ')) return <h6 key={i} className="text-xs font-bold mt-2 mb-2">{parseInline(firstLine.substring(7))}</h6>;
+            if (firstLine.startsWith('##### ')) return <h5 key={i} className="text-sm font-bold mt-2 mb-2">{parseInline(firstLine.substring(6))}</h5>;
+            if (firstLine.startsWith('#### ')) return <h4 key={i} className="text-base font-bold mt-3 mb-2">{parseInline(firstLine.substring(5))}</h4>;
             if (firstLine.startsWith('### ')) return <h3 key={i} className="text-lg font-bold mt-4 mb-2">{parseInline(firstLine.substring(4))}</h3>;
+            if (firstLine.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
+            if (firstLine.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
             
-            if (lines.every(line => line.trim().startsWith('* ') || line.trim().startsWith('- '))) {
+            if (trimmedBlock.startsWith('```') && trimmedBlock.endsWith('```')) {
+                const language = lines[0].substring(3).trim();
+                const code = lines.slice(1, -1).join('\n');
+                return <CodeBlock key={i} language={language} code={code} />;
+            }
+
+            const isSeparatorLine = (line: string) => /^\s*\|?(\s*:?--+:?\s*\|)+(\s*:?--+:?\s*)?\|?\s*$/.test(line);
+            const isTable = lines.length >= 2 && lines[0].includes('|') && isSeparatorLine(lines[1]);
+            
+            if (isTable) {
+                const parseRow = (rowString: string) => {
+                    return rowString.replace(/^\s*\||\|\s*$/g, '').split('|').map(cell => cell.trim());
+                };
+
+                const headers = parseRow(lines[0]);
+                const bodyLines = lines.slice(2);
+
                 return (
-                    <ul key={i} className="list-disc list-inside space-y-1 my-2">
-                        {lines.map((line, j) => (
-                            <li key={j}>{parseInline(line.replace(/^(\*|-)\s*/, ''))}</li>
-                        ))}
-                    </ul>
+                    <div key={i} className="my-4 overflow-x-auto rounded-lg border border-slate-600">
+                        <table className="min-w-full text-sm">
+                            <thead className="bg-slate-700/50">
+                                <tr>
+                                    {headers.map((header, hIndex) => (
+                                        <th key={hIndex} className="p-3 font-semibold text-left text-slate-200">{parseInline(header)}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bodyLines.map((line, lIndex) => {
+                                    if (!line.includes('|')) return null;
+                                    const cells = parseRow(line);
+                                    const cellCountDiff = headers.length - cells.length;
+                                    if (cellCountDiff > 0) {
+                                        for(let k = 0; k < cellCountDiff; k++) cells.push('');
+                                    }
+
+                                    return (
+                                        <tr key={lIndex} className="border-t border-slate-700 hover:bg-slate-800/40">
+                                            {cells.slice(0, headers.length).map((cell, cIndex) => (
+                                                <td key={cIndex} className="p-3 text-slate-300 align-top">{parseInline(cell)}</td>
+                                            ))}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 );
             }
             
-             if (lines.every(line => /^\d+\.\s/.test(line.trim()))) {
-                 return (
-                    <ol key={i} className="list-decimal list-inside space-y-1 my-2">
-                        {lines.map((line, j) => (
-                            <li key={j}>{parseInline(line.replace(/^\d+\.\s*/, ''))}</li>
-                        ))}
-                    </ol>
-                );
+            if (/^\s*(\*|-|\d+\.)\s/.test(trimmedBlock)) {
+                return <MarkdownList key={i} lines={lines} parseInlineFn={parseInline} />;
             }
 
             return <p key={i} className="my-2">{parseInline(block)}</p>;
@@ -530,32 +703,64 @@ const SubjectPage: React.FC = () => {
             {/* Input Area */}
             <div className="p-6 w-full max-w-4xl mx-auto">
                  {hasChatStarted &&
-                    <div className="flex flex-wrap justify-end items-center gap-x-6 gap-y-3 mb-4">
-                        <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
-                            <TrashIcon className="w-4 h-4" />
-                            Clear Chat
-                        </button>
-                        <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
-                            <span>Questions:</span>
-                            {[3, 5, 10].map(num => (
-                                <button
-                                    key={num}
-                                    onClick={() => setQuizLength(num)}
-                                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                    <div className={`flex flex-wrap items-center gap-x-6 gap-y-3 mb-4 ${isUrdu ? 'justify-start' : 'justify-end'}`} dir="ltr">
+                        {isUrdu ? (
+                            <>
+                                <button 
+                                    onClick={handleGenerateQuiz} 
+                                    disabled={isGeneratingQuiz || isLoading}
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
-                                    {num}
+                                    <QuizIcon className="w-5 h-5" />
+                                    <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
                                 </button>
-                            ))}
-                        </div>
-                         <button 
-                            onClick={handleGenerateQuiz} 
-                            disabled={isGeneratingQuiz || isLoading}
-                            className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                            <QuizIcon className="w-5 h-5" />
-                            <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
-                        </button>
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                    <span>Questions:</span>
+                                    {[3, 5, 10].map(num => (
+                                        <button
+                                            key={num}
+                                            onClick={() => setQuizLength(num)}
+                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                        >
+                                            {num}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
+                                <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
+                                    <TrashIcon className="w-4 h-4" />
+                                    Clear Chat
+                                </button>
+                            </>
+                        ) : (
+                             <>
+                                <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
+                                    <TrashIcon className="w-4 h-4" />
+                                    Clear Chat
+                                </button>
+                                <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                    <span>Questions:</span>
+                                    {[3, 5, 10].map(num => (
+                                        <button
+                                            key={num}
+                                            onClick={() => setQuizLength(num)}
+                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                        >
+                                            {num}
+                                        </button>
+                                    ))}
+                                </div>
+                                 <button 
+                                    onClick={handleGenerateQuiz} 
+                                    disabled={isGeneratingQuiz || isLoading}
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <QuizIcon className="w-5 h-5" />
+                                    <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
+                                </button>
+                            </>
+                        )}
                     </div>
                  }
                 {!hasChatStarted && (
@@ -597,7 +802,8 @@ const SubjectPage: React.FC = () => {
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSend()}
                         placeholder={`Ask JLX anything about ${name}...`}
-                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-2 ${isUrdu ? 'text-right' : ''}`}
+                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-2 ${isUrdu ? 'text-right' : 'text-left'}`}
+                        dir={isUrdu ? 'rtl' : 'ltr'}
                         disabled={isLoading}
                     />
                     <button 

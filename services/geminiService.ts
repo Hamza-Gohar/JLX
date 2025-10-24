@@ -44,7 +44,6 @@ export const generateResponse = async (
 };
 
 
-
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
   try {
     // Filter out interrupted messages and take the last 10 messages for context
