@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Message, Subject, Part, Content } from "../types";
 
 const ai = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
+const model = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.5-flash";
 
 export const generateResponse = async (
   subject: Subject,
@@ -27,12 +27,13 @@ export const generateResponse = async (
     });
 
     // ✅ Correctly return the AI response text
-    return result.response.text();
+    return response.text;
   } catch (error) {
     console.error("Gemini API error:", error);
-    return "Sorry, there was an issue generating the response.";
+    throw new Error("I'm sorry, I encountered an error while processing your request. Please try again later. Here's an example of what you could ask: 'Explain Newton's laws of motion.'");
   }
 };
+
 
 
 
