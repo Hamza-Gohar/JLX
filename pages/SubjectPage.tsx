@@ -1,16 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SUBJECTS } from '../constants';
-import type { Message, Subject, Quiz, Part, TextPart } from '../types';
-import { generateResponse, generateQuiz } from '../services/geminiService';
-import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon, TrashIcon } from '../components/icons';
+import type { Message, Subject, Quiz, Part, TextPart, Flashcards, ChatSession } from '../types';
+import { generateResponse, generateQuiz, generateFlashcards } from '../services/geminiService';
+import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon, TrashIcon, FlashcardIcon, MicrophoneIcon, MenuIcon } from '../components/icons';
 import QuizModal from '../components/QuizModal';
+import FlashcardModal from '../components/FlashcardModal';
+import ChatHistorySidebar from '../components/ChatHistorySidebar';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 declare const MathJax: any;
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILES = 4;
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_HISTORY_ITEMS = 10;
 
 
 // Utility to convert file to base64
@@ -322,142 +326,199 @@ const MessagePartRenderer: React.FC<{ parts: Part[]; isStreaming: boolean }> = (
 };
 
 
-// Custom hook for chat logic
-const useChat = (subject: Subject | undefined) => {
-    const [messages, setMessages] = useState<Message[]>([]);
+// Custom hook for chat history logic
+const useChatHistory = (subject: Subject | undefined) => {
+    const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
+    const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const storageKey = `chat_history_${subject?.id}`;
+    const storageKey = useMemo(() => subject ? `chat_history_${subject.id}` : null, [subject]);
 
-    // Refs to hold current values for use in cleanup effect
-    const isLoadingRef = useRef(isLoading);
-    useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+    const startNewChat = useCallback(() => {
+        setActiveChatId(`new-${Date.now()}`);
+    }, []);
 
-    const messagesRef = useRef(messages);
-    useEffect(() => { messagesRef.current = messages; }, [messages]);
+    const saveHistory = useCallback((history: ChatSession[]) => {
+        if (!storageKey) return;
+        const sortedHistory = [...history].sort((a, b) => b.timestamp - a.timestamp);
+        localStorage.setItem(storageKey, JSON.stringify(sortedHistory));
+    }, [storageKey]);
 
     useEffect(() => {
-        if (!subject) return;
+        if (!storageKey) return;
         try {
-            const savedMessages = localStorage.getItem(storageKey);
-            if (savedMessages) {
-                setMessages(JSON.parse(savedMessages));
-            } else {
-                setMessages([]);
-            }
+            const savedHistory = localStorage.getItem(storageKey);
+            const parsedHistory: ChatSession[] = savedHistory ? JSON.parse(savedHistory) : [];
+            setChatHistory(parsedHistory);
+            startNewChat(); // Always start a new chat on page load
         } catch (error) {
-            console.error("Failed to parse messages from localStorage", error);
-            setMessages([]);
+            console.error("Failed to load chat history from localStorage", error);
+            setChatHistory([]);
+            startNewChat();
         }
-    }, [subject, storageKey]);
+    }, [storageKey, startNewChat]);
 
-    useEffect(() => {
-        if (!subject) return;
-        if (messages.length > 0) {
-            localStorage.setItem(storageKey, JSON.stringify(messages));
-        } else {
-            localStorage.removeItem(storageKey);
-        }
-    }, [messages, subject, storageKey]);
-    
-    // Effect to handle saving interrupted state on unmount
-    useEffect(() => {
-        return () => { // This cleanup runs when the component/hook unmounts
-            if (isLoadingRef.current) {
-                const finalMessages = [...messagesRef.current];
-                const lastMessage = finalMessages[finalMessages.length - 1];
-                if (lastMessage && lastMessage.role === 'model') {
-                    if (lastMessage.parts.length === 1 && 'text' in lastMessage.parts[0] && lastMessage.parts[0].text.length === 0) {
-                        lastMessage.parts = [{ text: 'User Stopped The Response' }];
-                    }
-                    lastMessage.isInterrupted = true;
-                    localStorage.setItem(storageKey, JSON.stringify(finalMessages));
+    const loadChat = useCallback((chatId: string) => {
+        setActiveChatId(chatId);
+    }, []);
+
+    const deleteChat = useCallback((chatId: string) => {
+        setChatHistory(currentHistory => {
+            const newHistory = currentHistory.filter(c => c.id !== chatId);
+            saveHistory(newHistory);
+            if (activeChatId === chatId) {
+                if (newHistory.length > 0) {
+                    setActiveChatId(newHistory[0].id);
+                } else {
+                    startNewChat();
                 }
             }
-        };
-    }, [storageKey]);
+            return newHistory;
+        });
+    }, [activeChatId, saveHistory, startNewChat]);
 
-    const clearChat = useCallback(() => {
-        // Explicitly remove from localStorage to ensure data is cleared,
-        // then update state to re-render the UI. This is more robust
-        // than relying solely on the useEffect hook.
-        localStorage.removeItem(storageKey);
-        setMessages([]);
-    }, [storageKey]);
+    const clearHistory = useCallback(() => {
+        setChatHistory([]);
+        startNewChat();
+        if (storageKey) {
+            localStorage.removeItem(storageKey);
+        }
+    }, [storageKey, startNewChat]);
 
     const sendMessage = useCallback(async (parts: Part[]) => {
         if (!subject || parts.length === 0) return;
 
         const userMessage: Message = { role: 'user', parts };
-        const assistantMessagePlaceholder: Message = { role: 'model', parts: [{ text: '' }] };
+        const assistantPlaceholder: Message = { role: 'model', parts: [{ text: '' }] };
         
-        setMessages(prev => [...prev, userMessage, assistantMessagePlaceholder]);
+        const currentChat = chatHistory.find(c => c.id === activeChatId);
+        const isNewChat = !currentChat || activeChatId?.startsWith('new-');
+        
+        const historyForApi = isNewChat ? [] : currentChat.messages;
+        const chatToUpdateId = isNewChat ? Date.now().toString() : activeChatId!;
+
         setIsLoading(true);
 
+        if (isNewChat) {
+            const newChat: ChatSession = {
+                id: chatToUpdateId,
+                timestamp: Date.now(),
+                messages: [userMessage, assistantPlaceholder]
+            };
+            setActiveChatId(chatToUpdateId);
+            setChatHistory(prev => [newChat, ...prev.filter(c => c.id !== activeChatId)].slice(0, MAX_HISTORY_ITEMS));
+        } else {
+            setChatHistory(prev => prev.map(c =>
+                c.id === chatToUpdateId ?
+                { ...c, timestamp: Date.now(), messages: [...c.messages, userMessage, assistantPlaceholder] } : c
+            ).sort((a,b) => b.timestamp - a.timestamp));
+        }
+
         try {
-            const fullText = await generateResponse(subject, messages, parts);
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
-                    lastMessage.parts = [{ text: fullText }];
-                }
-                return newMessages;
+            const fullText = await generateResponse(subject, historyForApi, parts);
+            setChatHistory(prev => {
+                const finalHistory = prev.map(c => {
+                    if (c.id === chatToUpdateId) {
+                        const newMessages = c.messages.map(m => ({...m})); // Ensure deep enough copy
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: fullText }];
+                            delete lastMsg.isInterrupted;
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                });
+                saveHistory(finalHistory);
+                return finalHistory;
             });
         } catch (error) {
             const errorText = error instanceof Error ? error.message : "An unknown error occurred.";
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
-                    lastMessage.parts = [{ text: errorText }];
-                    lastMessage.isInterrupted = true;
-                }
-                return newMessages;
+            setChatHistory(prev => {
+                const finalHistory = prev.map(c => {
+                    if (c.id === chatToUpdateId) {
+                         const newMessages = c.messages.map(m => ({...m}));
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: errorText }];
+                            lastMsg.isInterrupted = true;
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                });
+                saveHistory(finalHistory);
+                return finalHistory;
             });
         } finally {
             setIsLoading(false);
         }
+    }, [subject, chatHistory, activeChatId, saveHistory]);
 
-    }, [subject, messages]);
+    const handleTryAgain = useCallback(async (userParts: Part[], messageIndex: number) => {
+        if (!subject || !activeChatId) return;
 
-    const handleTryAgain = useCallback(async (userParts: Part[], placeholderIndex: number) => {
-        if (!subject) return;
-
-        const historyForRetry = messages.slice(0, placeholderIndex - 1);
-        const userMessage: Message = { role: 'user', parts: userParts };
-        const assistantMessagePlaceholder: Message = { role: 'model', parts: [{ text: '' }] };
+        const currentChat = chatHistory.find(c => c.id === activeChatId);
+        if (!currentChat) return;
         
-        setMessages([...historyForRetry, userMessage, assistantMessagePlaceholder]);
+        const historyForApi = currentChat.messages.slice(0, messageIndex);
+        const assistantPlaceholder: Message = { role: 'model', parts: [{ text: '' }] };
+        
         setIsLoading(true);
 
+        setChatHistory(prev => prev.map(c => 
+            c.id === activeChatId
+            ? { ...c, timestamp: Date.now(), messages: [...historyForApi, userParts, assistantPlaceholder] }
+            : c
+        ).sort((a,b) => b.timestamp - a.timestamp));
+
         try {
-            const fullText = await generateResponse(subject, historyForRetry, userParts);
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
-                    lastMessage.parts = [{ text: fullText }];
-                }
-                return newMessages;
+            const fullText = await generateResponse(subject, historyForApi, userParts);
+            setChatHistory(prev => {
+                const finalHistory = prev.map(c => {
+                    if (c.id === activeChatId) {
+                        const newMessages = c.messages.map(m => ({...m}));
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: fullText }];
+                            delete lastMsg.isInterrupted;
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                });
+                saveHistory(finalHistory);
+                return finalHistory;
             });
         } catch (error) {
             const errorText = error instanceof Error ? error.message : "An unknown error occurred.";
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (lastMessage.role === 'model') {
-                    lastMessage.parts = [{ text: errorText }];
-                    lastMessage.isInterrupted = true;
-                }
-                return newMessages;
+            setChatHistory(prev => {
+                const finalHistory = prev.map(c => {
+                    if (c.id === activeChatId) {
+                        const newMessages = c.messages.map(m => ({...m}));
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: errorText }];
+                            lastMsg.isInterrupted = true;
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                });
+                saveHistory(finalHistory);
+                return finalHistory;
             });
         } finally {
             setIsLoading(false);
         }
+    }, [subject, chatHistory, activeChatId, saveHistory]);
 
-    }, [subject, messages]);
+    const messages = useMemo(() => {
+        if (!activeChatId) return [];
+        const activeChat = chatHistory.find(c => c.id === activeChatId);
+        return activeChat ? activeChat.messages : [];
+    }, [activeChatId, chatHistory]);
 
-    return { messages, isLoading, sendMessage, handleTryAgain, clearChat };
+    return { messages, isLoading, sendMessage, handleTryAgain, chatHistory, activeChatId, loadChat, startNewChat, deleteChat, clearHistory };
 };
 
 const FilePreview: React.FC<{ file: File; onRemove: () => void }> = ({ file, onRemove }) => {
@@ -501,7 +562,8 @@ const FilePreview: React.FC<{ file: File; onRemove: () => void }> = ({ file, onR
 const SubjectPage: React.FC = () => {
     const { subjectId } = useParams<{ subjectId: string }>();
     const subject = SUBJECTS.find(s => s.id === subjectId);
-    const { messages, isLoading, sendMessage, handleTryAgain, clearChat } = useChat(subject);
+    const { messages, isLoading, sendMessage, handleTryAgain, chatHistory, activeChatId, loadChat, startNewChat, deleteChat, clearHistory } = useChatHistory(subject);
+
     const [inputValue, setInputValue] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -511,9 +573,38 @@ const SubjectPage: React.FC = () => {
     const [quizData, setQuizData] = useState<Quiz | null>(null);
     const [showQuiz, setShowQuiz] = useState(false);
     const [quizLength, setQuizLength] = useState<number>(5);
+
+    const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
+    const [flashcardData, setFlashcardData] = useState<Flashcards | null>(null);
+    const [showFlashcards, setShowFlashcards] = useState(false);
+    const [flashcardLength, setFlashcardLength] = useState<number>(10);
+    
+    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
     
     const hasChatStarted = messages.length > 0;
     const isUrdu = subject?.id === 'urdu';
+    const lang = isUrdu ? 'ur-PK' : 'en-US';
+
+    const {
+        isListening,
+        transcript,
+        startListening,
+        stopListening,
+        hasRecognitionSupport,
+    } = useSpeechRecognition({ lang });
+
+    const showToast = (message: string) => {
+        setToastMessage(message);
+        setTimeout(() => setToastMessage(null), 3000);
+    };
+    
+    useEffect(() => {
+        // Syncs the input field with the live transcript from the microphone
+        if (isListening) {
+            setInputValue(transcript);
+        }
+    }, [transcript, isListening]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -527,6 +618,9 @@ const SubjectPage: React.FC = () => {
 
     const handleSend = async () => {
         if ((!inputValue.trim() && files.length === 0) || isLoading) return;
+        if (isListening) {
+            stopListening();
+        }
 
         const textPart: Part[] = inputValue.trim() ? [{ text: inputValue }] : [];
         const fileParts: Part[] = await Promise.all(
@@ -545,6 +639,14 @@ const SubjectPage: React.FC = () => {
         sendMessage([{ text: question }]);
     };
     
+    const handleToggleListening = () => {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening(inputValue);
+        }
+    };
+
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         // Fix: Explicitly type selectedFiles as File[] to ensure correct type inference for 'file' in the loop.
         const selectedFiles: File[] = Array.from(event.target.files || []);
@@ -596,9 +698,29 @@ const SubjectPage: React.FC = () => {
         URL.revokeObjectURL(url);
     };
     
-    const handleClearChat = () => {
-        clearChat();
+    const handleClearHistory = () => {
+        if (window.confirm("Are you sure you want to delete all chats for this subject?")) {
+            clearHistory();
+            showToast(`All chats for ${name} cleared.`);
+        }
     };
+
+    const handleNewChat = () => {
+        startNewChat();
+        setSidebarOpen(false);
+    }
+    
+    const handleLoadChat = (chatId: string) => {
+        loadChat(chatId);
+        showToast("Loaded previous chat.");
+        setSidebarOpen(false);
+    };
+    
+    const handleDeleteChat = (chatId: string) => {
+        deleteChat(chatId);
+        showToast("Chat deleted successfully.");
+    };
+
 
     const handleGenerateQuiz = useCallback(async () => {
         if (!subject) return;
@@ -614,11 +736,41 @@ const SubjectPage: React.FC = () => {
         setIsGeneratingQuiz(false);
     }, [subject, messages, quizLength]);
 
+    const handleGenerateFlashcards = useCallback(async () => {
+        if (!subject) return;
+
+        setIsGeneratingFlashcards(true);
+        const flashcards = await generateFlashcards(subject, messages, flashcardLength);
+        if (flashcards && flashcards.length > 0) {
+            setFlashcardData(flashcards);
+            setShowFlashcards(true);
+        } else {
+            alert("Sorry, I couldn't generate flashcards for this conversation. Please chat a bit more about the topic and try again!");
+        }
+        setIsGeneratingFlashcards(false);
+    }, [subject, messages, flashcardLength]);
+
     return (
         <div 
             className={`flex flex-col h-full transition-all duration-500 ease-in-out ${hasChatStarted ? 'justify-between' : 'justify-center items-center'} ${isUrdu ? 'font-urdu' : ''}`}
             dir={isUrdu ? 'rtl' : 'ltr'}
         >
+            <ChatHistorySidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+                subjectName={name}
+                chatHistory={chatHistory}
+                activeChatId={activeChatId}
+                onLoadChat={handleLoadChat}
+                onNewChat={handleNewChat}
+                onDeleteChat={handleDeleteChat}
+                onClearAll={handleClearHistory}
+            />
+            {toastMessage && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-out">
+                    {toastMessage}
+                </div>
+            )}
             {showQuiz && quizData && (
                 <QuizModal 
                     quiz={quizData} 
@@ -626,14 +778,21 @@ const SubjectPage: React.FC = () => {
                     onClose={() => setShowQuiz(false)} 
                 />
             )}
+            {showFlashcards && flashcardData && (
+                <FlashcardModal 
+                    flashcards={flashcardData} 
+                    subjectName={name} 
+                    onClose={() => setShowFlashcards(false)} 
+                />
+            )}
             
             {/* Animated Header */}
             <div className={`w-full transition-all duration-500 ease-in-out ${hasChatStarted ? 'py-3 px-6 border-b border-white/10' : 'p-6'}`}>
                  <div className="flex items-center justify-between w-full" dir="ltr">
-                    {/* Left: Back Button */}
-                    <Link to="/" className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="Back to Home">
-                        <ArrowLeftIcon className="w-6 h-6 text-slate-300" />
-                    </Link>
+                    {/* Left: Menu Button */}
+                    <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="Open chat history">
+                        <MenuIcon className="w-6 h-6 text-slate-300" />
+                    </button>
 
                     {/* Center: Icon and Title */}
                     <div className={`flex items-center gap-4 transition-all duration-500 ease-in-out ${hasChatStarted ? 'flex-row' : 'flex-col'}`}>
@@ -706,6 +865,14 @@ const SubjectPage: React.FC = () => {
                     <div className={`flex flex-wrap items-center gap-x-6 gap-y-3 mb-4 ${isUrdu ? 'justify-start' : 'justify-end'}`} dir="ltr">
                         {isUrdu ? (
                             <>
+                                <button
+                                    onClick={handleGenerateFlashcards}
+                                    disabled={isGeneratingFlashcards || isLoading}
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <FlashcardIcon className="w-5 h-5" />
+                                    <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
+                                </button>
                                 <button 
                                     onClick={handleGenerateQuiz} 
                                     disabled={isGeneratingQuiz || isLoading}
@@ -727,18 +894,30 @@ const SubjectPage: React.FC = () => {
                                     ))}
                                 </div>
                                 <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
-                                <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
-                                    <TrashIcon className="w-4 h-4" />
-                                    Clear Chat
-                                </button>
                             </>
                         ) : (
                              <>
-                                <button onClick={handleClearChat} className="text-xs sm:text-sm text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1.5">
-                                    <TrashIcon className="w-4 h-4" />
-                                    Clear Chat
-                                </button>
                                 <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                    <span>Cards:</span>
+                                    {[5, 10, 20].map(num => (
+                                        <button
+                                            key={num}
+                                            onClick={() => setFlashcardLength(num)}
+                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${flashcardLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                        >
+                                            {num}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={handleGenerateFlashcards}
+                                    disabled={isGeneratingFlashcards || isLoading}
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <FlashcardIcon className="w-5 h-5" />
+                                    <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
+                                </button>
                                 <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
                                     <span>Questions:</span>
                                     {[3, 5, 10].map(num => (
@@ -806,6 +985,16 @@ const SubjectPage: React.FC = () => {
                         dir={isUrdu ? 'rtl' : 'ltr'}
                         disabled={isLoading}
                     />
+                    {hasRecognitionSupport && (
+                        <button
+                            onClick={handleToggleListening}
+                            disabled={isLoading}
+                            className={`p-3 rounded-xl hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed ${isListening ? 'text-rose-500' : 'text-slate-400 hover:text-white'}`}
+                            aria-label={isListening ? 'Stop listening' : 'Start listening'}
+                        >
+                            <MicrophoneIcon className="w-5 h-5" />
+                        </button>
+                    )}
                     <button 
                         onClick={handleSend} 
                         disabled={isLoading || (!inputValue.trim() && files.length === 0)} 

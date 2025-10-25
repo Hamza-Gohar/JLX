@@ -30,6 +30,12 @@ export interface Message {
   isInterrupted?: boolean;
 }
 
+export interface ChatSession {
+  id: string;
+  messages: Message[];
+  timestamp: number;
+}
+
 export interface QuizQuestion {
   question: string;
   options: string[];
@@ -37,3 +43,10 @@ export interface QuizQuestion {
 }
 
 export type Quiz = QuizQuestion[];
+
+export interface Flashcard {
+  question: string;
+  answer: string;
+}
+
+export type Flashcards = Flashcard[];

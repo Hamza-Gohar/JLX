@@ -1,5 +1,7 @@
 {
-  "name": "Copy of JLX AI",
+  "name": "Copy of JLX AI (final)",
   "description": "An AI-powered learning assistant for students of Jauhar Lyceum High School to help master various subjects with guided assistance.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
