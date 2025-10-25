@@ -515,7 +515,10 @@ const useChatHistory = (subject: Subject | undefined) => {
     const messages = useMemo(() => {
         if (!activeChatId) return [];
         const activeChat = chatHistory.find(c => c.id === activeChatId);
-        return activeChat ? activeChat.messages : [];
+        if (activeChat && activeChat.messages) {
+            return activeChat.messages.filter(m => m && Array.isArray(m.parts));
+        }
+        return [];
     }, [activeChatId, chatHistory]);
 
     return { messages, isLoading, sendMessage, handleTryAgain, chatHistory, activeChatId, loadChat, startNewChat, deleteChat, clearHistory };
