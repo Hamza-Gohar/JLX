@@ -1,11 +1,35 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import SubjectPage from './pages/SubjectPage';
-import { HomeIcon } from './constants';
+import { SUBJECTS, HomeIcon } from './constants';
 
 const App: React.FC = () => {
+  useEffect(() => {
+    // This logic runs once when the app loads.
+    // It checks for an old data structure and clears it to prevent crashes.
+    const CHAT_HISTORY_VERSION_KEY = 'chat_history_version';
+    const CURRENT_VERSION = '2.0'; // Increment this version to force-clear history again in the future.
+
+    try {
+      const storedVersion = localStorage.getItem(CHAT_HISTORY_VERSION_KEY);
+
+      if (storedVersion !== CURRENT_VERSION) {
+        console.log('Outdated or missing chat history version. Clearing all chat history for all subjects.');
+        
+        SUBJECTS.forEach(subject => {
+          localStorage.removeItem(`chat_history_${subject.id}`);
+        });
+
+        localStorage.setItem(CHAT_HISTORY_VERSION_KEY, CURRENT_VERSION);
+        console.log(`Chat history cleared. Version set to ${CURRENT_VERSION}.`);
+      }
+    } catch (error) {
+      console.error('Error while managing chat history version:', error);
+    }
+  }, []); // Empty dependency array ensures this runs only once on app startup.
+
   return (
     <HashRouter>
       <div className="bg-[#0B1220] text-slate-100 h-full flex flex-col">
