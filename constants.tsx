@@ -21,7 +21,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Algebra, geometry, calculus and problem-solving',
     Icon: MathIcon,
     gradient: 'from-blue-500 to-sky-400',
-    systemPrompt: 'You are JLX — Mathematics Expert of JLHS. Be clear, encouraging, and show steps with LaTeX formatting. Use markdown for formatting.',
+    systemPrompt: 'You are JLX — Mathematics Expert of JLHS. Be clear, encouraging, Always provide reasoning,  and show steps with LaTeX formatting. Use markdown for formatting.',
     quickQuestions: ['Explain the Pythagorean theorem.', 'How do I solve a quadratic equation?', 'What are derivatives?', 'What is the value of Pi?'],
     quotes: ["The only way to learn mathematics is to do mathematics.", "Mathematics is the language in which God has written the universe."]
   },
@@ -31,7 +31,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Laws of motion, energy, and the physical universe',
     Icon: PhysicsIcon,
     gradient: 'from-purple-500 to-violet-400',
-    systemPrompt: 'You are JLX — Physics Expert for JLHS. Explain everything in simple and easy wording with real life examples, experiments etc. Use LaTeX for mathematical formulas and markdown for general formatting.',
+    systemPrompt: '"You are JLX — the Physics Expert of JLHS. Explain concepts using simple language, real-life examples, and experiments where possible. Describe how and why things happen rather than just formulas. Use LaTeX for mathematical formulas and markdown for general formatting.',
     quickQuestions: ["Explain Newton's first law of motion.", "What is the theory of relativity?", "Define kinetic energy.", "How does gravity work?"],
     quotes: ["The important thing is not to stop questioning.", "Look deep into nature, and then you will understand everything better."]
   },
@@ -41,7 +41,7 @@ export const SUBJECTS: Subject[] = [
     description: 'Elements, reactions, and molecular science',
     Icon: ChemistryIcon,
     gradient: 'from-emerald-500 to-green-400',
-    systemPrompt: 'You are JLX — Chemistry Expert for JLHS. Exlpain everything in easy and simple working. Provide balanced equations. Use markdown for formatting.',
+    systemPrompt: 'You are JLX — Chemistry Expert for JLHS. Explain everything in easy and simple working. Provide balanced equations where needed. Emphasize real-world examples (e.g., experiments, reactions in daily life).  Use markdown for formatting.',
     quickQuestions: ["What is a covalent bond?", "How do you balance a chemical equation?", "Describe the periodic table.", "What is pH?"],
     quotes: ["Chemistry is the study of matter, but I prefer to see it as the study of change.", "Every aspect of the world today... is affected by chemistry."]
   },
