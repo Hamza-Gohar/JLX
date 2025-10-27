@@ -83,18 +83,7 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
     );
 };
 
-const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> = ({ text, isStreaming }) => {
-    const contentRef = useRef<HTMLDivElement>(null);
-
-    useLayoutEffect(() => {
-        if (!isStreaming && contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            MathJax.typesetClear([contentRef.current]);
-            MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
-                console.error('MathJax typesetting error:', err);
-            });
-        }
-    }, [isStreaming, text]);
-
+const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
     const parseInline = (line: string): React.ReactNode => {
         const mathRegex = /(\$[^$]+\$|\$\$[\s\S]+?\$\$)/g;
         const parts = line.split(mathRegex);
@@ -300,7 +289,6 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
 
     return (
         <div
-            ref={contentRef}
             className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap"
         >
           {renderContent()}
@@ -309,12 +297,12 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
 };
 
 
-const MessagePartRenderer: React.FC<{ parts: Part[]; isStreaming: boolean }> = ({ parts, isStreaming }) => {
+const MessagePartRenderer: React.FC<{ parts: Part[] }> = ({ parts }) => {
     return (
         <div className="space-y-3">
             {parts.map((part, index) => {
                 if ('text' in part) {
-                    return <FormattedMessageContent key={index} text={part.text} isStreaming={isStreaming} />;
+                    return <FormattedMessageContent key={index} text={part.text} />;
                 }
                 if ('inlineData' in part && part.inlineData.mimeType.startsWith('image/')) {
                     return (
@@ -676,6 +664,21 @@ const SubjectPage: React.FC = () => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isLoading]);
 
+    // Centralized MathJax typesetting
+    useEffect(() => {
+        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+            // Add a small delay to ensure the DOM is fully updated after state changes
+            const timer = setTimeout(() => {
+                MathJax.typesetPromise().catch((err: any) => {
+                    console.error('Global MathJax typesetting error:', err);
+                });
+            }, 100);
+
+            return () => clearTimeout(timer);
+        }
+    }, [messages, showQuiz, showFlashcards]);
+
+
     if (!subject) {
         return <div className="p-8 text-center text-red-500">Subject not found.</div>;
     }
@@ -886,8 +889,7 @@ const SubjectPage: React.FC = () => {
                     const isLastMessage = index === messages.length - 1;
                     const textContent = (message.parts.find((p): p is TextPart => 'text' in p)?.text || '').trim();
                     const isThinking = isLastMessage && message.role === 'model' && isLoading && textContent.length === 0;
-                    const isStreaming = isLastMessage && isLoading;
-
+                    
                     return (
                         <div key={index} className={`flex items-end gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {message.role === 'model' && <Icon className="w-8 h-8 text-white p-1.5 bg-blue-500 rounded-full flex-shrink-0" />}
@@ -907,7 +909,7 @@ const SubjectPage: React.FC = () => {
                                 ) : message.isInterrupted && prevMessage?.role === 'user' ? (
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex-1">
-                                            <MessagePartRenderer parts={message.parts} isStreaming={false} />
+                                            <MessagePartRenderer parts={message.parts} />
                                         </div>
                                         <button 
                                             onClick={() => handleTryAgain(prevMessage.parts, index)}
@@ -917,7 +919,7 @@ const SubjectPage: React.FC = () => {
                                         </button>
                                     </div>
                                 ) : (
-                                    <MessagePartRenderer parts={message.parts} isStreaming={isStreaming} />
+                                    <MessagePartRenderer parts={message.parts} />
                                 )}
                             </div>
                         </div>
