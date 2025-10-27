@@ -1,7 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import type { Quiz, QuizQuestion } from '../types';
 import { CheckIcon, XIcon } from './icons';
+
+declare const MathJax: any;
 
 interface QuizModalProps {
   quiz: Quiz;
@@ -13,6 +15,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [showResults, setShowResults] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const currentQuestion = quiz[currentQuestionIndex];
   const selectedAnswer = selectedAnswers[currentQuestionIndex];
@@ -23,6 +26,15 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
     }
     return acc;
   }, 0);
+
+  useLayoutEffect(() => {
+    if (contentRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+        MathJax.typesetClear([contentRef.current]);
+        MathJax.typesetPromise([contentRef.current]).catch((err: any) => {
+            console.error('MathJax typesetting error:', err);
+        });
+    }
+  }, [currentQuestion, showResults]);
 
   const handleSelectAnswer = (option: string) => {
     if (selectedAnswer) return;
@@ -118,6 +130,7 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
       <div 
+        ref={contentRef}
         className="bg-[#172033] border border-white/10 rounded-2xl w-full max-w-2xl p-8 shadow-2xl relative" 
         onClick={(e) => e.stopPropagation()}
       >

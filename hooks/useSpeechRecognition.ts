@@ -27,6 +27,7 @@ const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechReco
 export const useSpeechRecognition = ({ lang }: { lang: string }) => {
     const [isListening, setIsListening] = useState(false);
     const [transcript, setTranscript] = useState('');
+    const [error, setError] = useState<string | null>(null);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
 
     const hasRecognitionSupport = !!SpeechRecognitionAPI;
@@ -45,8 +46,10 @@ export const useSpeechRecognition = ({ lang }: { lang: string }) => {
     }, [stopListening]);
 
 
-    const startListening = useCallback((currentText = '') => {
+    const startListening = useCallback(() => {
         if (isListening || !hasRecognitionSupport) return;
+        
+        setError(null); // Clear previous errors
 
         const recognition = new SpeechRecognitionAPI();
         recognitionRef.current = recognition;
@@ -57,7 +60,7 @@ export const useSpeechRecognition = ({ lang }: { lang: string }) => {
 
         recognition.onstart = () => {
             setIsListening(true);
-            setTranscript(currentText);
+            setTranscript('');
         };
 
         recognition.onend = () => {
@@ -67,9 +70,15 @@ export const useSpeechRecognition = ({ lang }: { lang: string }) => {
 
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
+            let errorMessage = "An unknown error occurred during speech recognition.";
             if (event.error === 'not-allowed') {
-                 alert("Microphone access was denied. Please allow microphone access in your browser settings to use this feature.");
+                 errorMessage = "Microphone access was denied. Please allow it in your browser settings.";
+            } else if (event.error === 'network') {
+                errorMessage = "Network error. Please check your internet connection and try again.";
+            } else if (event.error === 'no-speech') {
+                errorMessage = "No speech was detected. Please try again.";
             }
+            setError(errorMessage);
             setIsListening(false);
         };
 
@@ -79,8 +88,7 @@ export const useSpeechRecognition = ({ lang }: { lang: string }) => {
                 .map(result => result.transcript)
                 .join('');
             
-            const prefix = currentText ? currentText.trim() + ' ' : '';
-            setTranscript(prefix + transcriptResult);
+            setTranscript(transcriptResult);
         };
         
         recognition.start();
@@ -90,6 +98,7 @@ export const useSpeechRecognition = ({ lang }: { lang: string }) => {
     return {
         isListening,
         transcript,
+        error,
         startListening,
         stopListening,
         hasRecognitionSupport,

@@ -1,7 +1,9 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useLayoutEffect } from 'react';
 import type { Flashcards } from '../types';
 import { ArrowLeftIcon, ArrowRightIcon } from './icons';
+
+declare const MathJax: any;
 
 interface FlashcardModalProps {
   flashcards: Flashcards;
@@ -12,8 +14,18 @@ interface FlashcardModalProps {
 const FlashcardModal: React.FC<FlashcardModalProps> = ({ flashcards, subjectName, onClose }) => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const currentCard = flashcards[currentCardIndex];
+
+  useLayoutEffect(() => {
+    if (cardRef.current && typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+        MathJax.typesetClear([cardRef.current]);
+        MathJax.typesetPromise([cardRef.current]).catch((err: any) => {
+            console.error('MathJax typesetting error:', err);
+        });
+    }
+  }, [currentCard]);
 
   const handleFlip = () => {
     setIsFlipped(prev => !prev);
@@ -55,6 +67,7 @@ const FlashcardModal: React.FC<FlashcardModalProps> = ({ flashcards, subjectName
 
         <div className="flex-1 flex flex-col justify-center items-center" style={{ perspective: '1200px' }}>
              <div 
+                ref={cardRef}
                 className={`w-full h-full max-w-2xl relative transition-transform duration-700 cursor-pointer shadow-2xl rounded-2xl`}
                 style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'}}
                 onClick={handleFlip}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMe
 import { Link, useParams } from 'react-router-dom';
 import { SUBJECTS } from '../constants';
 import type { Message, Subject, Quiz, Part, TextPart, Flashcards, ChatSession } from '../types';
-import { generateResponse, generateQuiz, generateFlashcards } from '../services/geminiService';
+import { generateResponseStream, generateQuiz, generateFlashcards } from '../services/geminiService';
 import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon, TrashIcon, FlashcardIcon, MicrophoneIcon, MenuIcon } from '../components/icons';
 import QuizModal from '../components/QuizModal';
 import FlashcardModal from '../components/FlashcardModal';
@@ -223,7 +223,7 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
             const trimmedBlock = block.trim();
             if (!trimmedBlock) return null;
 
-            const lines = trimmedBlock.split('\n');
+            const lines = block.split('\n');
             const firstLine = lines[0];
 
             if (firstLine.startsWith('###### ')) return <h6 key={i} className="text-xs font-bold mt-2 mb-2">{parseInline(firstLine.substring(7))}</h6>;
@@ -285,6 +285,13 @@ const FormattedMessageContent: React.FC<{ text: string; isStreaming: boolean }> 
             
             if (/^\s*(\*|-|\d+\.)\s/.test(trimmedBlock)) {
                 return <MarkdownList key={i} lines={lines} parseInlineFn={parseInline} />;
+            }
+
+            const codeKeywords = ['def', 'class', 'import', 'export', 'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue'];
+            const looksLikeCode = lines.some(line => line.trim().startsWith('#') || line.trim().startsWith('//') || codeKeywords.some(kw => line.includes(kw)));
+
+            if (looksLikeCode && lines.length > 1) {
+                return <CodeBlock key={i} language="" code={block} />;
             }
 
             return <p key={i} className="my-2">{parseInline(block)}</p>;
@@ -414,11 +421,27 @@ const useChatHistory = (subject: Subject | undefined) => {
         }
 
         try {
-            const fullText = await generateResponse(subject, historyForApi, parts);
+            const stream = generateResponseStream(subject, historyForApi, parts);
+            let fullText = '';
+            for await (const chunk of stream) {
+                fullText += chunk;
+                setChatHistory(prev => prev.map(c => {
+                    if (c.id === chatToUpdateId) {
+                        const newMessages = [...c.messages];
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: fullText }];
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                }));
+            }
+            
             setChatHistory(prev => {
                 const finalHistory = prev.map(c => {
                     if (c.id === chatToUpdateId) {
-                        const newMessages = c.messages.map(m => ({...m})); // Ensure deep enough copy
+                        const newMessages = c.messages.map(m => ({...m}));
                         const lastMsg = newMessages[newMessages.length - 1];
                         if (lastMsg?.role === 'model') {
                             lastMsg.parts = [{ text: fullText }];
@@ -460,19 +483,40 @@ const useChatHistory = (subject: Subject | undefined) => {
         const currentChat = chatHistory.find(c => c.id === activeChatId);
         if (!currentChat) return;
         
-        const historyForApi = currentChat.messages.slice(0, messageIndex);
+        const prevUserMessage = currentChat.messages[messageIndex - 1];
+        if (!prevUserMessage || prevUserMessage.role !== 'user') return;
+
+        const historyForApi = currentChat.messages.slice(0, messageIndex - 1);
+        const messagesForNewState = currentChat.messages.slice(0, messageIndex);
+        
         const assistantPlaceholder: Message = { role: 'model', parts: [{ text: '' }] };
         
         setIsLoading(true);
 
         setChatHistory(prev => prev.map(c => 
             c.id === activeChatId
-            ? { ...c, timestamp: Date.now(), messages: [...historyForApi, userParts, assistantPlaceholder] }
+            ? { ...c, timestamp: Date.now(), messages: [...messagesForNewState, assistantPlaceholder] }
             : c
         ).sort((a,b) => b.timestamp - a.timestamp));
 
         try {
-            const fullText = await generateResponse(subject, historyForApi, userParts);
+            const stream = generateResponseStream(subject, historyForApi, userParts);
+            let fullText = '';
+            for await (const chunk of stream) {
+                fullText += chunk;
+                setChatHistory(prev => prev.map(c => {
+                    if (c.id === activeChatId) {
+                        const newMessages = [...c.messages];
+                        const lastMsg = newMessages[newMessages.length - 1];
+                        if (lastMsg?.role === 'model') {
+                            lastMsg.parts = [{ text: fullText }];
+                        }
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                }));
+            }
+
             setChatHistory(prev => {
                 const finalHistory = prev.map(c => {
                     if (c.id === activeChatId) {
@@ -571,6 +615,8 @@ const SubjectPage: React.FC = () => {
     const [files, setFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const initialInputValueRef = useRef<string>('');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
     const [quizData, setQuizData] = useState<Quiz | null>(null);
@@ -592,6 +638,7 @@ const SubjectPage: React.FC = () => {
     const {
         isListening,
         transcript,
+        error: speechError,
         startListening,
         stopListening,
         hasRecognitionSupport,
@@ -603,11 +650,27 @@ const SubjectPage: React.FC = () => {
     };
     
     useEffect(() => {
-        // Syncs the input field with the live transcript from the microphone
+        if (speechError) {
+            showToast(speechError);
+        }
+    }, [speechError]);
+    
+    useEffect(() => {
+        // This effect combines the initial text with the live transcript
         if (isListening) {
-            setInputValue(transcript);
+            const prefix = initialInputValueRef.current ? initialInputValueRef.current.trim() + ' ' : '';
+            setInputValue(prefix + transcript);
         }
     }, [transcript, isListening]);
+
+    useLayoutEffect(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto'; // Reset height to recalculate
+            const scrollHeight = textarea.scrollHeight;
+            textarea.style.height = `${scrollHeight}px`; // Set to content height
+        }
+    }, [inputValue]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -646,7 +709,8 @@ const SubjectPage: React.FC = () => {
         if (isListening) {
             stopListening();
         } else {
-            startListening(inputValue);
+            initialInputValueRef.current = inputValue;
+            startListening();
         }
     };
 
@@ -961,7 +1025,7 @@ const SubjectPage: React.FC = () => {
                         ))}
                     </div>
                 )}
-                <div className="flex items-center gap-3 bg-[#172033] border border-white/10 rounded-xl p-2">
+                <div className="flex items-end gap-3 bg-[#172033] border border-white/10 rounded-xl p-2">
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -978,13 +1042,19 @@ const SubjectPage: React.FC = () => {
                     >
                         <PaperclipIcon className="w-5 h-5" />
                     </button>
-                    <input
-                        type="text"
+                    <textarea
+                        ref={textareaRef}
+                        rows={1}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSend()}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
+                                e.preventDefault();
+                                handleSend();
+                            }
+                        }}
                         placeholder={`Ask JLX anything about ${name}...`}
-                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-2 ${isUrdu ? 'text-right' : 'text-left'}`}
+                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-2 resize-none overflow-y-auto max-h-48 ${isUrdu ? 'text-right' : 'text-left'}`}
                         dir={isUrdu ? 'rtl' : 'ltr'}
                         disabled={isLoading}
                     />

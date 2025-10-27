@@ -42,6 +42,41 @@ export const generateResponse = async (
   }
 };
 
+export async function* generateResponseStream(
+    subject: Subject,
+    messages: Message[],
+    newParts: Part[]
+): AsyncGenerator<string> {
+  try {
+    const history: Content[] = messages
+        .filter(m => !m.isInterrupted)
+        .map(m => ({
+            role: m.role,
+            parts: m.parts
+        }));
+    
+    const contents: Content[] = [...history, { role: 'user', parts: newParts }];
+
+    const responseStream = await ai.models.generateContentStream({
+        model: model,
+        contents: contents,
+        config: {
+            systemInstruction: subject.systemPrompt,
+            temperature: 0.5,
+        }
+    });
+
+    for await (const chunk of responseStream) {
+        if (chunk.text) {
+            yield chunk.text;
+        }
+    }
+  } catch (error) {
+    console.error("Gemini API stream error:", error);
+    throw new Error("I'm sorry, I encountered an error while processing your request. Please try again later.");
+  }
+}
+
 
 export const generateQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
   try {
