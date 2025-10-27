@@ -9,6 +9,8 @@ interface QuizModalProps {
   onClose: () => void;
 }
 
+declare const MathJax: any;
+
 const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
@@ -23,6 +25,14 @@ const QuizModal: React.FC<QuizModalProps> = ({ quiz, subjectName, onClose }) => 
     }
     return acc;
   }, 0);
+
+  useLayoutEffect(() => {
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+      MathJax.typesetPromise().catch((err: any) => {
+        console.error('MathJax typesetting error in QuizModal:', err);
+      });
+    }
+  }, [currentQuestion]); // Re-run when the question changes
 
   const handleSelectAnswer = (option: string) => {
     if (selectedAnswer) return;

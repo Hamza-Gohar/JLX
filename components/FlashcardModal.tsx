@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import type { Flashcards } from '../types';
 import { ArrowLeftIcon, ArrowRightIcon } from './icons';
 
@@ -9,11 +9,21 @@ interface FlashcardModalProps {
   onClose: () => void;
 }
 
+declare const MathJax: any;
+
 const FlashcardModal: React.FC<FlashcardModalProps> = ({ flashcards, subjectName, onClose }) => {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
 
   const currentCard = flashcards[currentCardIndex];
+
+  useLayoutEffect(() => {
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+      MathJax.typesetPromise().catch((err: any) => {
+        console.error('MathJax typesetting error in FlashcardModal:', err);
+      });
+    }
+  }, [currentCard]); // Re-run when the card changes
 
   const handleFlip = () => {
     setIsFlipped(prev => !prev);

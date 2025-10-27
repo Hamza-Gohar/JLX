@@ -83,7 +83,7 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
     );
 };
 
-const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
+const FormattedMessageContent: React.FC<{ text: string; subject: Subject }> = ({ text, subject }) => {
     const parseInline = (line: string): React.ReactNode => {
         const mathRegex = /(\$[^$]+\$|\$\$[\s\S]+?\$\$)/g;
         const parts = line.split(mathRegex);
@@ -206,6 +206,7 @@ const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
 
 
     const renderContent = () => {
+        const isComputerScience = subject.id === 'computer-science';
         const blocks = text.split(/\n{2,}/);
         
         return blocks.map((block, i) => {
@@ -222,7 +223,7 @@ const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
             if (firstLine.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
             if (firstLine.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
             
-            if (trimmedBlock.startsWith('```') && trimmedBlock.endsWith('```')) {
+            if (isComputerScience && trimmedBlock.startsWith('```') && trimmedBlock.endsWith('```')) {
                 const language = lines[0].substring(3).trim();
                 const code = lines.slice(1, -1).join('\n');
                 return <CodeBlock key={i} language={language} code={code} />;
@@ -276,11 +277,13 @@ const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
                 return <MarkdownList key={i} lines={lines} parseInlineFn={parseInline} />;
             }
 
-            const codeKeywords = ['def', 'class', 'import', 'export', 'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue'];
-            const looksLikeCode = lines.some(line => line.trim().startsWith('#') || line.trim().startsWith('//') || codeKeywords.some(kw => line.includes(kw)));
-
-            if (looksLikeCode && lines.length > 1) {
-                return <CodeBlock key={i} language="" code={block} />;
+            if (isComputerScience) {
+                const codeKeywords = ['def', 'class', 'import', 'export', 'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue'];
+                const looksLikeCode = lines.some(line => line.trim().startsWith('#') || line.trim().startsWith('//') || codeKeywords.some(kw => line.includes(kw)));
+    
+                if (looksLikeCode && lines.length > 1) {
+                    return <CodeBlock key={i} language="" code={block} />;
+                }
             }
 
             return <p key={i} className="my-2">{parseInline(block)}</p>;
@@ -297,12 +300,12 @@ const FormattedMessageContent: React.FC<{ text: string }> = ({ text }) => {
 };
 
 
-const MessagePartRenderer: React.FC<{ parts: Part[] }> = ({ parts }) => {
+const MessagePartRenderer: React.FC<{ parts: Part[]; subject: Subject }> = ({ parts, subject }) => {
     return (
         <div className="space-y-3">
             {parts.map((part, index) => {
                 if ('text' in part) {
-                    return <FormattedMessageContent key={index} text={part.text} />;
+                    return <FormattedMessageContent key={index} text={part.text} subject={subject} />;
                 }
                 if ('inlineData' in part && part.inlineData.mimeType.startsWith('image/')) {
                     return (
@@ -909,7 +912,7 @@ const SubjectPage: React.FC = () => {
                                 ) : message.isInterrupted && prevMessage?.role === 'user' ? (
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex-1">
-                                            <MessagePartRenderer parts={message.parts} />
+                                            <MessagePartRenderer parts={message.parts} subject={subject} />
                                         </div>
                                         <button 
                                             onClick={() => handleTryAgain(prevMessage.parts, index)}
@@ -919,7 +922,7 @@ const SubjectPage: React.FC = () => {
                                         </button>
                                     </div>
                                 ) : (
-                                    <MessagePartRenderer parts={message.parts} />
+                                    <MessagePartRenderer parts={message.parts} subject={subject} />
                                 )}
                             </div>
                         </div>
@@ -937,7 +940,7 @@ const SubjectPage: React.FC = () => {
                                 <button
                                     onClick={handleGenerateFlashcards}
                                     disabled={isGeneratingFlashcards || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
                                 >
                                     <FlashcardIcon className="w-5 h-5" />
                                     <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
@@ -945,7 +948,7 @@ const SubjectPage: React.FC = () => {
                                 <button 
                                     onClick={handleGenerateQuiz} 
                                     disabled={isGeneratingQuiz || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
                                 >
                                     <QuizIcon className="w-5 h-5" />
                                     <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
@@ -982,7 +985,7 @@ const SubjectPage: React.FC = () => {
                                 <button
                                     onClick={handleGenerateFlashcards}
                                     disabled={isGeneratingFlashcards || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
                                 >
                                     <FlashcardIcon className="w-5 h-5" />
                                     <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
@@ -1002,7 +1005,7 @@ const SubjectPage: React.FC = () => {
                                  <button 
                                     onClick={handleGenerateQuiz} 
                                     disabled={isGeneratingQuiz || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
                                 >
                                     <QuizIcon className="w-5 h-5" />
                                     <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
@@ -1039,7 +1042,7 @@ const SubjectPage: React.FC = () => {
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isLoading || files.length >= MAX_FILES}
-                        className="p-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
+                        className="p-3 rounded-lg flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
                         aria-label="Attach file"
                     >
                         <PaperclipIcon className="w-5 h-5" />
@@ -1056,7 +1059,7 @@ const SubjectPage: React.FC = () => {
                             }
                         }}
                         placeholder={`Ask JLX anything about ${name}...`}
-                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-2 resize-none overflow-y-auto max-h-48 ${isUrdu ? 'text-right' : 'text-left'}`}
+                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-[10px] resize-none overflow-y-auto max-h-48 ${isUrdu ? 'text-right' : 'text-left'}`}
                         dir={isUrdu ? 'rtl' : 'ltr'}
                         disabled={isLoading}
                     />
@@ -1064,7 +1067,7 @@ const SubjectPage: React.FC = () => {
                         <button
                             onClick={handleToggleListening}
                             disabled={isLoading}
-                            className={`p-3 rounded-xl hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed ${isListening ? 'text-rose-500' : 'text-slate-400 hover:text-white'}`}
+                            className={`p-3 rounded-lg flex-shrink-0 hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed ${isListening ? 'text-rose-500' : 'text-slate-400 hover:text-white'}`}
                             aria-label={isListening ? 'Stop listening' : 'Start listening'}
                         >
                             <MicrophoneIcon className="w-5 h-5" />
@@ -1073,7 +1076,7 @@ const SubjectPage: React.FC = () => {
                     <button 
                         onClick={handleSend} 
                         disabled={isLoading || (!inputValue.trim() && files.length === 0)} 
-                        className="bg-blue-600 text-white p-3 rounded-xl disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors"
+                        className="bg-blue-600 text-white p-3 rounded-lg flex-shrink-0 disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors"
                         aria-label="Send message"
                     >
                         <PaperPlaneIcon className="w-5 h-5" />
