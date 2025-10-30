@@ -1,5 +1,5 @@
 
-import React from 'react';
+
 import type { Subject } from './types';
 import { 
     MathIcon, 
@@ -102,7 +102,7 @@ export const SUBJECTS: Subject[] = [
     Icon: ComputerScienceIcon,
     gradient: 'from-fuchsia-500 to-pink-500',
     systemPrompt: 'You are JLX — Computer Science Expert for JLHS. Teach everything in easy to understand way. Explain concepts clearly, and discuss examples. Use markdown for formatting.',
-    quickQuestions: ["What is an algorithm?", "Explain Big O notation.", "What's the difference between an array and a linked list?", "Compare the syntax of Javascript and Python"],
+    quickQuestions: ["What is an algorithm?", "Explain Big O notation.", "What's the difference between an array and a linked list?", "How does the internet work?"],
     quotes: ["Talk is cheap. Show me the code.", "The computer was born to solve problems that did not exist before."]
   },
 ];

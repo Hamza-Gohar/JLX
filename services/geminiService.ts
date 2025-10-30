@@ -93,7 +93,7 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
       })
       .join('\n\n');
 
-    const prompt = `Based on the following conversation about ${subject.name}, generate a short multiple-choice quiz with ${questionCount} questions to test understanding. The questions should be relevant to the key topics discussed. Ensure the 'correctAnswer' value is an exact match to one of the strings in the 'options' array.
+    const prompt = `Based on the following conversation about ${subject.name}, generate a short multiple-choice quiz with ${questionCount} questions to test understanding. The questions should be relevant to the key topics discussed. Ensure the 'correctAnswer' value is an exact match to one of the strings in the 'options' array. For any chemical formulas or mathematical equations, use LaTeX formatting enclosed in single dollar signs (e.g., $H_2O$ or $E=mc^2$).
 
     Conversation:
     ${conversationHistory}`;
@@ -148,6 +148,75 @@ export const generateQuiz = async (subject: Subject, messages: Message[], questi
   }
 };
 
+export const generateExtraHardQuiz = async (subject: Subject, messages: Message[], questionCount: number): Promise<Quiz | null> => {
+  try {
+    const conversationHistory = messages
+      .filter(m => !m.isInterrupted)
+      .slice(-10) 
+      .map(m => {
+        const textContent = m.parts
+          .filter((p): p is TextPart => 'text' in p)
+          .map(p => p.text)
+          .join(' ');
+        return `${m.role === 'user' ? 'User' : 'AI'}: ${textContent}`
+      })
+      .join('\n\n');
+
+    const prompt = `Based on the following conversation about ${subject.name}, generate an extremely difficult and challenging multiple-choice quiz with ${questionCount} questions. These questions should test deep understanding, require critical thinking, and cover nuanced or complex aspects of the topics discussed. Ensure the 'correctAnswer' value is an exact match to one of the strings in the 'options' array. For any chemical formulas or mathematical equations, use LaTeX formatting enclosed in single dollar signs (e.g., $H_2O$ or $E=mc^2$).
+
+    Conversation:
+    ${conversationHistory}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a helpful assistant that creates extremely difficult educational quizzes in JSON format.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: {
+                type: Type.STRING,
+                description: "The quiz question."
+              },
+              options: {
+                type: Type.ARRAY,
+                description: "An array of 4 possible answers.",
+                items: { type: Type.STRING }
+              },
+              correctAnswer: {
+                type: Type.STRING,
+                description: "The correct answer, which must be one of the strings from the options array."
+              }
+            },
+            required: ["question", "options", "correctAnswer"]
+          }
+        }
+      }
+    });
+    
+    let quizJson;
+    try {
+        quizJson = JSON.parse(response.text);
+    } catch(parseError) {
+        console.error("Failed to parse JSON response for extra hard quiz:", parseError);
+        return null;
+    }
+
+    if (Array.isArray(quizJson)) {
+      return quizJson as Quiz;
+    }
+    return null;
+
+  } catch (error) {
+    console.error("Gemini API error during extra hard quiz generation:", error);
+    return null;
+  }
+};
+
 
 export const generateFlashcards = async (subject: Subject, messages: Message[], cardCount: number): Promise<Flashcards | null> => {
     try {
@@ -169,7 +238,7 @@ export const generateFlashcards = async (subject: Subject, messages: Message[], 
         ${conversationHistory}`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
                 systemInstruction: "You are a helpful assistant that creates educational flashcards in JSON format.",

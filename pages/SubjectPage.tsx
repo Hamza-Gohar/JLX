@@ -1,8 +1,10 @@
+
+
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SUBJECTS } from '../constants';
 import type { Message, Subject, Quiz, Part, TextPart, Flashcards, ChatSession } from '../types';
-import { generateResponseStream, generateQuiz, generateFlashcards } from '../services/geminiService';
+import { generateResponseStream, generateQuiz, generateFlashcards, generateExtraHardQuiz } from '../services/geminiService';
 import { ArrowLeftIcon, QuizIcon, PaperclipIcon, XIcon as CloseIcon, TrashIcon, FlashcardIcon, MicrophoneIcon, MenuIcon } from '../components/icons';
 import QuizModal from '../components/QuizModal';
 import FlashcardModal from '../components/FlashcardModal';
@@ -204,95 +206,119 @@ const FormattedMessageContent: React.FC<{ text: string; subject: Subject }> = ({
         return listElement;
     };
 
+    const parseNonTableBlock = (blockText: string, key: string | number) => {
+        const isComputerScience = subject.id === 'computer-science';
+        const trimmedBlock = blockText.trim();
+        if (!trimmedBlock) return null;
+
+        const lines = blockText.split('\n');
+        const firstLine = lines[0];
+
+        if (firstLine.startsWith('###### ')) return <h6 key={key} className="text-xs font-bold mt-2 mb-2">{parseInline(firstLine.substring(7))}</h6>;
+        if (firstLine.startsWith('##### ')) return <h5 key={key} className="text-sm font-bold mt-2 mb-2">{parseInline(firstLine.substring(6))}</h5>;
+        if (firstLine.startsWith('#### ')) return <h4 key={key} className="text-base font-bold mt-3 mb-2">{parseInline(firstLine.substring(5))}</h4>;
+        if (firstLine.startsWith('### ')) return <h3 key={key} className="text-lg font-bold mt-4 mb-2">{parseInline(firstLine.substring(4))}</h3>;
+        if (firstLine.startsWith('## ')) return <h2 key={key} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
+        if (firstLine.startsWith('# ')) return <h1 key={key} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
+        
+        if (isComputerScience && trimmedBlock.startsWith('```') && trimmedBlock.endsWith('```')) {
+            const language = lines[0].substring(3).trim();
+            const code = lines.slice(1, -1).join('\n');
+            return <CodeBlock key={key} language={language} code={code} />;
+        }
+        
+        if (/^\s*(\*|-|\d+\.)\s/.test(trimmedBlock)) {
+            return <MarkdownList key={key} lines={lines} parseInlineFn={parseInline} />;
+        }
+
+        if (isComputerScience) {
+            const codeKeywords = ['def', 'class', 'import', 'export', 'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue'];
+            const looksLikeCode = lines.some(line => line.trim().startsWith('#') || line.trim().startsWith('//') || codeKeywords.some(kw => line.includes(kw)));
+
+            if (looksLikeCode && lines.length > 1) {
+                return <CodeBlock key={key} language="" code={blockText} />;
+            }
+        }
+
+        return <p key={key} className="my-2">{parseInline(blockText)}</p>;
+    };
 
     const renderContent = () => {
-        const isComputerScience = subject.id === 'computer-science';
         const blocks = text.split(/\n{2,}/);
         
-        return blocks.map((block, i) => {
-            const trimmedBlock = block.trim();
-            if (!trimmedBlock) return null;
-
+        return blocks.flatMap((block, i) => {
             const lines = block.split('\n');
-            const firstLine = lines[0];
-
-            if (firstLine.startsWith('###### ')) return <h6 key={i} className="text-xs font-bold mt-2 mb-2">{parseInline(firstLine.substring(7))}</h6>;
-            if (firstLine.startsWith('##### ')) return <h5 key={i} className="text-sm font-bold mt-2 mb-2">{parseInline(firstLine.substring(6))}</h5>;
-            if (firstLine.startsWith('#### ')) return <h4 key={i} className="text-base font-bold mt-3 mb-2">{parseInline(firstLine.substring(5))}</h4>;
-            if (firstLine.startsWith('### ')) return <h3 key={i} className="text-lg font-bold mt-4 mb-2">{parseInline(firstLine.substring(4))}</h3>;
-            if (firstLine.startsWith('## ')) return <h2 key={i} className="text-xl font-bold mt-5 mb-2">{parseInline(firstLine.substring(3))}</h2>;
-            if (firstLine.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold mt-6 mb-2">{parseInline(firstLine.substring(2))}</h1>;
-            
-            if (isComputerScience && trimmedBlock.startsWith('```') && trimmedBlock.endsWith('```')) {
-                const language = lines[0].substring(3).trim();
-                const code = lines.slice(1, -1).join('\n');
-                return <CodeBlock key={i} language={language} code={code} />;
-            }
-
             const isSeparatorLine = (line: string) => /^\s*\|?(\s*:?--+:?\s*\|)+(\s*:?--+:?\s*)?\|?\s*$/.test(line);
-            const isTable = lines.length >= 2 && lines[0].includes('|') && isSeparatorLine(lines[1]);
-            
-            if (isTable) {
-                const parseRow = (rowString: string) => {
-                    return rowString.replace(/^\s*\||\|\s*$/g, '').split('|').map(cell => cell.trim());
-                };
 
-                const headers = parseRow(lines[0]);
-                const bodyLines = lines.slice(2);
-
-                return (
-                    <div key={i} className="my-4 overflow-x-auto rounded-lg border border-slate-600">
-                        <table className="min-w-full text-sm">
-                            <thead className="bg-slate-700/50">
-                                <tr>
-                                    {headers.map((header, hIndex) => (
-                                        <th key={hIndex} className="p-3 font-semibold text-left text-slate-200">{parseInline(header)}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {bodyLines.map((line, lIndex) => {
-                                    if (!line.includes('|')) return null;
-                                    const cells = parseRow(line);
-                                    const cellCountDiff = headers.length - cells.length;
-                                    if (cellCountDiff > 0) {
-                                        for(let k = 0; k < cellCountDiff; k++) cells.push('');
-                                    }
-
-                                    return (
-                                        <tr key={lIndex} className="border-t border-slate-700 hover:bg-slate-800/40">
-                                            {cells.slice(0, headers.length).map((cell, cIndex) => (
-                                                <td key={cIndex} className="p-3 text-slate-300 align-top">{parseInline(cell)}</td>
-                                            ))}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                );
-            }
-            
-            if (/^\s*(\*|-|\d+\.)\s/.test(trimmedBlock)) {
-                return <MarkdownList key={i} lines={lines} parseInlineFn={parseInline} />;
-            }
-
-            if (isComputerScience) {
-                const codeKeywords = ['def', 'class', 'import', 'export', 'const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue'];
-                const looksLikeCode = lines.some(line => line.trim().startsWith('#') || line.trim().startsWith('//') || codeKeywords.some(kw => line.includes(kw)));
-    
-                if (looksLikeCode && lines.length > 1) {
-                    return <CodeBlock key={i} language="" code={block} />;
+            let tableStartIndex = -1;
+            for (let j = 0; j < lines.length - 1; j++) {
+                if (lines[j].includes('|') && isSeparatorLine(lines[j + 1])) {
+                    tableStartIndex = j;
+                    break;
                 }
             }
+            
+            if (tableStartIndex === -1) {
+                return parseNonTableBlock(block, i);
+            }
+            
+            const elements: React.ReactNode[] = [];
+            const contentBefore = lines.slice(0, tableStartIndex).join('\n');
+            
+            let tableEndIndex = tableStartIndex + 2;
+            while (tableEndIndex < lines.length && lines[tableEndIndex].includes('|')) {
+                tableEndIndex++;
+            }
+            const tableLines = lines.slice(tableStartIndex, tableEndIndex);
+            const contentAfter = lines.slice(tableEndIndex).join('\n');
+            
+            if (contentBefore.trim()) {
+                elements.push(parseNonTableBlock(contentBefore, `${i}-before`));
+            }
+            
+            const parseRow = (rowString: string) => rowString.replace(/^\s*\||\|\s*$/g, '').split('|').map(cell => cell.trim());
+            const headers = parseRow(tableLines[0]);
+            const bodyLines = tableLines.slice(2);
 
-            return <p key={i} className="my-2">{parseInline(block)}</p>;
-        });
+            elements.push(
+                <div key={`${i}-table`} className="my-4 overflow-x-auto rounded-lg border border-slate-600">
+                    <table className="min-w-full text-sm text-left">
+                        <thead className="bg-slate-700/50">
+                            <tr>
+                                {headers.map((header, hIndex) => (
+                                    <th key={hIndex} className="p-3 font-semibold text-slate-200">{parseInline(header)}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {bodyLines.map((line, lIndex) => {
+                                 if (!line.includes('|')) return null;
+                                 const cells = parseRow(line);
+                                 while (cells.length < headers.length) cells.push('');
+                                return (
+                                    <tr key={lIndex} className="border-t border-slate-700 hover:bg-slate-800/40">
+                                        {cells.slice(0, headers.length).map((cell, cIndex) => (
+                                            <td key={cIndex} className="p-3 text-slate-300 align-top">{parseInline(cell)}</td>
+                                        ))}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            );
+
+            if (contentAfter.trim()) {
+                elements.push(parseNonTableBlock(contentAfter, `${i}-after`));
+            }
+
+            return elements;
+        }).filter(Boolean);
     };
 
     return (
         <div
-            className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap"
+            className="prose prose-invert max-w-none whitespace-pre-wrap break-words"
         >
           {renderContent()}
         </div>
@@ -337,8 +363,44 @@ const useChatHistory = (subject: Subject | undefined) => {
 
     const saveHistory = useCallback((history: ChatSession[]) => {
         if (!storageKey) return;
-        const sortedHistory = [...history].sort((a, b) => b.timestamp - a.timestamp);
-        localStorage.setItem(storageKey, JSON.stringify(sortedHistory));
+
+        const historyToSave = [...history].sort((a, b) => b.timestamp - a.timestamp);
+
+        // Attempt to save, progressively removing oldest chats if quota is exceeded.
+        // The loop ensures we try to save at least one chat (the most recent one).
+        for (let i = 0; i < historyToSave.length; i++) {
+            const dataToSave = historyToSave.slice(0, historyToSave.length - i);
+            try {
+                localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+                
+                // If we removed chats, log it and update the state to match.
+                if (i > 0) {
+                    console.log(`Local storage was full. Cleared ${i} oldest chat(s) to make space.`);
+                    setChatHistory(dataToSave);
+                }
+                return; // Success
+            } catch (e) {
+                const error = e as any;
+                const isQuotaError = 
+                    error.name === 'QuotaExceededError' ||
+                    (error.code && (error.code === 22 || error.code === 1014)) ||
+                    (error.name && error.name.toLowerCase().includes('quota'));
+                
+                if (!isQuotaError) {
+                    console.error("An error occurred while saving chat history:", error);
+                    return; // Exit on non-quota errors
+                }
+                
+                if (i === 0) {
+                    console.warn("Local storage quota exceeded. Attempting to clear old chats...");
+                }
+            }
+        }
+        
+        // If we reach here, it means we couldn't even save a single chat.
+        if (historyToSave.length > 0) {
+            console.error("Could not save chat history. Even the most recent chat is too large for the remaining storage space.");
+        }
     }, [storageKey]);
 
     useEffect(() => {
@@ -750,26 +812,6 @@ const SubjectPage: React.FC = () => {
             fileInputRef.current.value = '';
         }
     };
-
-
-    const exportChat = () => {
-        const chatText = messages.map(m => {
-            const textContent = m.parts
-                .map(p => ('text' in p ? p.text : `[Image: ${p.inlineData.mimeType}]`))
-                .join('\n');
-            return `${m.role === 'user' ? 'You' : name}: ${textContent}`;
-        }).join('\n\n');
-
-        const blob = new Blob([chatText], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${subject.id}_chat_export.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
     
     const handleClearHistory = () => {
         if (window.confirm("Are you sure you want to delete all chats for this subject?")) {
@@ -805,6 +847,20 @@ const SubjectPage: React.FC = () => {
             setShowQuiz(true);
         } else {
             alert("Sorry, I couldn't generate a quiz for this conversation. Please chat a bit more about the topic and try again!");
+        }
+        setIsGeneratingQuiz(false);
+    }, [subject, messages, quizLength]);
+
+    const handleGenerateExtraHardQuiz = useCallback(async () => {
+        if (!subject) return;
+
+        setIsGeneratingQuiz(true);
+        setShowQuiz(true); // Keep modal open
+        const quiz = await generateExtraHardQuiz(subject, messages, quizLength);
+        if (quiz && quiz.length > 0) {
+            setQuizData(quiz);
+        } else {
+            alert("Sorry, I couldn't generate an extra hard quiz. The conversation might not be detailed enough. Please try again!");
         }
         setIsGeneratingQuiz(false);
     }, [subject, messages, quizLength]);
@@ -849,6 +905,8 @@ const SubjectPage: React.FC = () => {
                     quiz={quizData} 
                     subjectName={name} 
                     onClose={() => setShowQuiz(false)} 
+                    onGenerateExtraHardQuiz={handleGenerateExtraHardQuiz}
+                    isGenerating={isGeneratingQuiz}
                 />
             )}
             {showFlashcards && flashcardData && (
@@ -886,7 +944,7 @@ const SubjectPage: React.FC = () => {
             </div>
 
             {/* Chat Window */}
-            <div className="flex-1 overflow-y-auto p-6 w-full max-w-4xl mx-auto space-y-6">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 w-full max-w-4xl mx-auto space-y-6">
                 {messages.map((message, index) => {
                     const prevMessage = messages[index - 1];
                     const isLastMessage = index === messages.length - 1;
@@ -896,10 +954,10 @@ const SubjectPage: React.FC = () => {
                     return (
                         <div key={index} className={`flex items-end gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {message.role === 'model' && <Icon className="w-8 h-8 text-white p-1.5 bg-blue-500 rounded-full flex-shrink-0" />}
-                            <div className={`max-w-xl rounded-2xl px-5 py-3 ${
+                            <div className={`max-w-[90%] sm:max-w-lg md:max-w-xl rounded-2xl px-5 py-3 ${
                                 message.role === 'user' 
-                                    ? `bg-blue-600 text-white ${isUrdu ? 'rounded-bl-none' : 'rounded-br-none'}` 
-                                    : `bg-[#172033] text-slate-200 ${isUrdu ? 'rounded-br-none' : 'rounded-bl-none'}`
+                                    ? `bg-blue-600 text-white text-sm ${isUrdu ? 'rounded-bl-none' : 'rounded-br-none'}` 
+                                    : `bg-[#172033] text-slate-200 text-xs sm:text-sm ${isUrdu ? 'rounded-br-none' : 'rounded-bl-none'}`
                             } break-words ${isUrdu ? 'leading-relaxed' : ''}`}>
                                {
                                 isThinking ? (
@@ -933,87 +991,135 @@ const SubjectPage: React.FC = () => {
 
             {/* Input Area */}
             <div className="p-6 w-full max-w-4xl mx-auto">
-                 {hasChatStarted &&
-                    <div className={`flex flex-wrap items-center gap-x-6 gap-y-3 mb-4 ${isUrdu ? 'justify-start' : 'justify-end'}`} dir="ltr">
-                        {isUrdu ? (
-                            <>
-                                <button
-                                    onClick={handleGenerateFlashcards}
-                                    disabled={isGeneratingFlashcards || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
-                                >
-                                    <FlashcardIcon className="w-5 h-5" />
-                                    <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
-                                </button>
-                                <button 
-                                    onClick={handleGenerateQuiz} 
-                                    disabled={isGeneratingQuiz || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
-                                >
-                                    <QuizIcon className="w-5 h-5" />
-                                    <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
-                                </button>
-                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
-                                    <span>Questions:</span>
-                                    {[3, 5, 10].map(num => (
-                                        <button
-                                            key={num}
-                                            onClick={() => setQuizLength(num)}
-                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
-                                        >
-                                            {num}
-                                        </button>
-                                    ))}
+                 {hasChatStarted && (
+                    <div className="mb-4" dir="ltr">
+                        {/* Mobile Layout */}
+                        <div className="sm:hidden space-y-2">
+                            <div className="flex gap-2">
+                                <div className="flex-1 flex items-center justify-between gap-2 p-1.5 rounded-lg bg-white/5">
+                                    <button
+                                        onClick={handleGenerateFlashcards}
+                                        disabled={isGeneratingFlashcards || isLoading}
+                                        className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
+                                    >
+                                        <FlashcardIcon className="w-4 h-4" />
+                                        <span>{isGeneratingFlashcards ? '...' : 'Cards'}</span>
+                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        {[5, 10, 20].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setFlashcardLength(num)}
+                                                className={`px-2 py-0.5 rounded font-medium text-xs transition-colors ${flashcardLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
-                            </>
-                        ) : (
-                             <>
-                                <button onClick={exportChat} className="text-xs sm:text-sm text-slate-400 hover:text-white transition-colors">Export Chat</button>
-                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
-                                    <span>Cards:</span>
-                                    {[5, 10, 20].map(num => (
-                                        <button
-                                            key={num}
-                                            onClick={() => setFlashcardLength(num)}
-                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${flashcardLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
-                                        >
-                                            {num}
-                                        </button>
-                                    ))}
+                                <div className="flex-1 flex items-center justify-between gap-2 p-1.5 rounded-lg bg-white/5">
+                                    <button
+                                        onClick={handleGenerateQuiz}
+                                        disabled={isGeneratingQuiz || isLoading}
+                                        className="flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
+                                    >
+                                        <QuizIcon className="w-4 h-4" />
+                                        <span>{isGeneratingQuiz ? '...' : 'Quiz'}</span>
+                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        {[3, 5, 10].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setQuizLength(num)}
+                                                className={`px-2 py-0.5 rounded font-medium text-xs transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <button
-                                    onClick={handleGenerateFlashcards}
-                                    disabled={isGeneratingFlashcards || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
-                                >
-                                    <FlashcardIcon className="w-5 h-5" />
-                                    <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
-                                </button>
-                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
-                                    <span>Questions:</span>
-                                    {[3, 5, 10].map(num => (
-                                        <button
-                                            key={num}
-                                            onClick={() => setQuizLength(num)}
-                                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
-                                        >
-                                            {num}
-                                        </button>
-                                    ))}
-                                </div>
-                                 <button 
-                                    onClick={handleGenerateQuiz} 
-                                    disabled={isGeneratingQuiz || isLoading}
-                                    className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
-                                >
-                                    <QuizIcon className="w-5 h-5" />
-                                    <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
-                                </button>
-                            </>
-                        )}
+                            </div>
+                        </div>
+                        {/* Desktop Layout */}
+                        <div className={`hidden sm:flex flex-wrap items-center gap-x-6 gap-y-3 ${isUrdu ? 'justify-start' : 'justify-end'}`}>
+                            {isUrdu ? (
+                                <>
+                                    <button
+                                        onClick={handleGenerateFlashcards}
+                                        disabled={isGeneratingFlashcards || isLoading}
+                                        className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
+                                    >
+                                        <FlashcardIcon className="w-5 h-5" />
+                                        <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
+                                    </button>
+                                    <button 
+                                        onClick={handleGenerateQuiz} 
+                                        disabled={isGeneratingQuiz || isLoading}
+                                        className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
+                                    >
+                                        <QuizIcon className="w-5 h-5" />
+                                        <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
+                                    </button>
+                                    <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                        <span>Questions:</span>
+                                        {[3, 5, 10].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setQuizLength(num)}
+                                                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                 <>
+                                    <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                        <span>Cards:</span>
+                                        {[5, 10, 20].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setFlashcardLength(num)}
+                                                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${flashcardLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={handleGenerateFlashcards}
+                                        disabled={isGeneratingFlashcards || isLoading}
+                                        className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
+                                    >
+                                        <FlashcardIcon className="w-5 h-5" />
+                                        <span>{isGeneratingFlashcards ? 'Generating...' : 'Flashcards'}</span>
+                                    </button>
+                                    <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+                                        <span>Questions:</span>
+                                        {[3, 5, 10].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setQuizLength(num)}
+                                                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${quizLength === num ? 'bg-blue-600 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                     <button 
+                                        onClick={handleGenerateQuiz} 
+                                        disabled={isGeneratingQuiz || isLoading}
+                                        className="text-xs sm:text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-900/50"
+                                    >
+                                        <QuizIcon className="w-5 h-5" />
+                                        <span>{isGeneratingQuiz ? 'Generating...' : 'Quiz Me!'}</span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
-                 }
+                 )}
                 {!hasChatStarted && (
                      <div className="grid grid-cols-2 gap-3 mb-4">
                         {quickQuestions.slice(0, 4).map((q, i) => (
@@ -1030,7 +1136,7 @@ const SubjectPage: React.FC = () => {
                         ))}
                     </div>
                 )}
-                <div className="flex items-end gap-3 bg-[#172033] border border-white/10 rounded-xl p-2">
+                <div className="flex items-end gap-2 sm:gap-3 bg-[#172033] border border-white/10 rounded-xl p-1 sm:p-2">
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -1042,7 +1148,7 @@ const SubjectPage: React.FC = () => {
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isLoading || files.length >= MAX_FILES}
-                        className="p-3 rounded-lg flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
+                        className="p-2 sm:p-3 rounded-lg flex-shrink-0 text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed"
                         aria-label="Attach file"
                     >
                         <PaperclipIcon className="w-5 h-5" />
@@ -1059,7 +1165,7 @@ const SubjectPage: React.FC = () => {
                             }
                         }}
                         placeholder={`Ask JLX anything about ${name}...`}
-                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-3 py-[10px] resize-none overflow-y-auto max-h-48 ${isUrdu ? 'text-right' : 'text-left'}`}
+                        className={`flex-1 bg-transparent focus:outline-none text-slate-200 placeholder-slate-500 px-2 sm:px-3 py-1.5 sm:py-2 resize-none overflow-y-auto max-h-32 sm:max-h-48 ${isUrdu ? 'text-right' : 'text-left'}`}
                         dir={isUrdu ? 'rtl' : 'ltr'}
                         disabled={isLoading}
                     />
@@ -1067,7 +1173,7 @@ const SubjectPage: React.FC = () => {
                         <button
                             onClick={handleToggleListening}
                             disabled={isLoading}
-                            className={`p-3 rounded-lg flex-shrink-0 hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed ${isListening ? 'text-rose-500' : 'text-slate-400 hover:text-white'}`}
+                            className={`p-2 sm:p-3 rounded-lg flex-shrink-0 hover:bg-slate-700/50 transition-colors disabled:text-slate-600 disabled:cursor-not-allowed ${isListening ? 'text-rose-500' : 'text-slate-400 hover:text-white'}`}
                             aria-label={isListening ? 'Stop listening' : 'Start listening'}
                         >
                             <MicrophoneIcon className="w-5 h-5" />
@@ -1076,7 +1182,7 @@ const SubjectPage: React.FC = () => {
                     <button 
                         onClick={handleSend} 
                         disabled={isLoading || (!inputValue.trim() && files.length === 0)} 
-                        className="bg-blue-600 text-white p-3 rounded-lg flex-shrink-0 disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors"
+                        className="bg-blue-600 text-white p-2 sm:p-3 rounded-lg flex-shrink-0 disabled:bg-slate-600 disabled:cursor-not-allowed hover:bg-blue-500 transition-colors"
                         aria-label="Send message"
                     >
                         <PaperPlaneIcon className="w-5 h-5" />
